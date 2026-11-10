@@ -122,7 +122,7 @@ async function scoreLead(input,revision){
 }
 function requirePost(req){
  if(req.method!=='POST'||!req.headers['content-type']?.startsWith('application/json'))throw Object.assign(new Error('Use a JSON POST.'),{status:405});
- if(req.headers.origin&&req.headers.origin!=='http://'+req.headers.host)throw Object.assign(new Error('Cross-origin requests are unavailable.'),{status:403});
+ if(req.headers.origin!=='http://'+req.headers.host)throw Object.assign(new Error('Cross-origin requests are unavailable.'),{status:403});
 }
 async function search(input,state){
  const ws=state.workspaces.find(x=>x.id===input.workspace);

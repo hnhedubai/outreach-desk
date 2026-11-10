@@ -54,7 +54,8 @@ managing outbound outreach worklists. Single-user, loopback-only. SQLite via the
 7. **Optimistic concurrency.** State is one JSON document with a `revision`. Writes must
    compare-and-swap on `revision` and return 409 on conflict. Do not drop the guard.
 8. **Provider clients.** Keep `redirect:'error'`, an `AbortSignal.timeout`, the busy/lock
-   guards, and the credit floors (Firecrawl 105-credit reserve; LimaData >=1 credit).
+   guards, and the credit floors (Firecrawl 105-credit reserve; LimaData >=4 credits for
+   `find/email_work`).
    Outcomes must be reviewed before saving; deliverability stays labelled unverified.
 
 ## 5. Coding conventions

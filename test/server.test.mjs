@@ -5,6 +5,7 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {classifyStreamError,createApp} from '../server.mjs';
+import {setPassword} from '../auth.mjs';
 
 let dataDir;
 let app;
@@ -12,7 +13,7 @@ let port;
 
 function request({method='GET',path,headers={},body}={}){
  return new Promise((resolve,reject)=>{
-  const req=http.request({host:'127.0.0.1',port,method,path,headers:{Host:`127.0.0.1:${port}`,...headers}},res=>{
+  const req=http.request({host:'127.0.0.1',port,method,path,headers:{Host:`127.0.0.1:${port}`,...(method==='POST'?{Origin:`http://127.0.0.1:${port}`}:{}),...headers}},res=>{
    const chunks=[];
    res.on('data',chunk=>chunks.push(chunk));
    res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,body:Buffer.concat(chunks).toString('utf8')}));
@@ -26,6 +27,7 @@ function json(response){return JSON.parse(response.body);}
 
 before(async()=>{
  dataDir=await mkdtemp(join(tmpdir(),'outreach-desk-server-'));
+ await setPassword(dataDir,'correct horse battery staple');
  app=await createApp({dataDir,port:0});
  await app.listen();
  port=app.server.address().port;
@@ -42,6 +44,19 @@ test('GET /api/auth/status returns the public authentication shape',async()=>{
  assert.deepEqual(Object.keys(json(response)).sort(),['authenticated','configured']);
  assert.equal(typeof json(response).authenticated,'boolean');
  assert.equal(typeof json(response).configured,'boolean');
+ assert.match(response.headers['content-security-policy']||'',/default-src 'self'/);
+ assert.equal(response.headers['x-content-type-options'],'nosniff');
+ assert.equal(response.headers['referrer-policy'],'no-referrer');
+ assert.equal(response.headers['cache-control'],'no-store');
+});
+
+test('reset status reports configured and login sets a strict HttpOnly session cookie',async()=>{
+ const reset=await request({path:'/api/auth/reset-status'});
+ assert.deepEqual(json(reset),{configured:true});
+ const response=await request({method:'POST',path:'/api/auth/login',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'admin',password:'correct horse battery staple'})});
+ assert.equal(response.status,200);
+ assert.match(response.headers['set-cookie']?.[0]||'',/^outreach_session=[^;]+; HttpOnly; SameSite=Strict; Path=\/; Max-Age=28800$/);
+ return response.headers['set-cookie'][0].split(';')[0];
 });
 
 test('GET /api/state requires a session cookie',async()=>{
@@ -51,6 +66,11 @@ test('GET /api/state requires a session cookie',async()=>{
 
 test('POST with a foreign Origin is rejected by the CSRF guard',async()=>{
  const response=await request({method:'POST',path:'/api/auth/login',headers:{Origin:'http://evil.example','Content-Type':'application/json'},body:'{}'});
+ assert.equal(response.status,403);
+});
+
+test('POST without an Origin is rejected by the CSRF guard',async()=>{
+ const response=await request({method:'POST',path:'/api/auth/login',headers:{Origin:'', 'Content-Type':'application/json'},body:'{}'});
  assert.equal(response.status,403);
 });
 
@@ -129,4 +149,40 @@ test('a second listener reports EADDRINUSE without an uncaught exception',async(
   await second.close();
   await rm(secondDir,{recursive:true,force:true});
  }
+});
+
+test('stale action revision is rejected instead of overwriting newer state',async()=>{
+ const login=await request({method:'POST',path:'/api/auth/login',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'admin',password:'correct horse battery staple'})});
+ const cookie=login.headers['set-cookie'][0].split(';')[0];
+ const current=await request({path:'/api/state',headers:{Cookie:cookie}});
+ const revision=json(current).state.revision;
+ const first=await request({method:'POST',path:'/api/action',headers:{Cookie:cookie,'Content-Type':'application/json'},body:JSON.stringify({type:'cookie',input:{workspace:'grynh2',value:'accepted'},revision})});
+ assert.equal(first.status,200);
+ const stale=await request({method:'POST',path:'/api/action',headers:{Cookie:cookie,'Content-Type':'application/json'},body:JSON.stringify({type:'cookie',input:{workspace:'grynh2',value:'necessary'},revision})});
+ assert.equal(stale.status,409);
+});
+
+test('change-password enforces the minimum and rotates the session',async()=>{
+ const login=await request({method:'POST',path:'/api/auth/login',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'admin',password:'correct horse battery staple'})});
+ const oldCookie=login.headers['set-cookie'][0].split(';')[0];
+ const short=await request({method:'POST',path:'/api/auth/change-password',headers:{Cookie:oldCookie,'Content-Type':'application/json'},body:JSON.stringify({currentPassword:'correct horse battery staple',newPassword:'short'})});
+ assert.equal(short.status,400);
+ const changed=await request({method:'POST',path:'/api/auth/change-password',headers:{Cookie:oldCookie,'Content-Type':'application/json'},body:JSON.stringify({currentPassword:'correct horse battery staple',newPassword:'new correct horse battery staple'})});
+ assert.equal(changed.status,200);
+ const newCookie=changed.headers['set-cookie'][0].split(';')[0];
+ assert.equal((await request({path:'/api/state',headers:{Cookie:oldCookie}})).status,401);
+ assert.equal((await request({path:'/api/state',headers:{Cookie:newCookie}})).status,200);
+ const logout=await request({method:'POST',path:'/api/auth/logout',headers:{Cookie:newCookie,'Content-Type':'application/json'},body:'{}'});
+ assert.equal(logout.status,200);
+ assert.match(logout.headers['set-cookie']?.[0]||'',/^outreach_session=; HttpOnly; SameSite=Strict; Path=\/; Max-Age=0$/);
+});
+
+test('Exa without a key returns a configure error, not a fake result',async()=>{
+ const previous=process.env.EXA_API_KEY;delete process.env.EXA_API_KEY;
+ const login=await request({method:'POST',path:'/api/auth/login',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'admin',password:'new correct horse battery staple'})});
+ const cookie=login.headers['set-cookie'][0].split(';')[0];
+ try{
+  const response=await request({method:'POST',path:'/api/search',headers:{Cookie:cookie,'Content-Type':'application/json'},body:JSON.stringify({workspace:'grynh2',source:'web',query:'renewable energy'})});
+  assert.equal(response.status,503);assert.match(json(response).error,/EXA_API_KEY/);
+ }finally{if(previous===undefined)delete process.env.EXA_API_KEY;else process.env.EXA_API_KEY=previous;}
 });

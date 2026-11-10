@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {classifyLimaResult,findLimaEmail} from '../research-providers.mjs';
+import {classifyLimaResult,findLimaEmail,perplexitySearch} from '../research-providers.mjs';
+import {firecrawlSearch} from '../firecrawl.mjs';
 
 test('classifyLimaResult distinguishes a matching work email',()=>{
   assert.deepEqual(classifyLimaResult({email:'person@matrixrenewables.com'},'matrixrenewables.com'),{
@@ -65,4 +66,49 @@ test('findLimaEmail allows a balance of four credits to reach the lookup endpoin
     if(previousKey===undefined)delete process.env.LIMADATA_API_KEY;else process.env.LIMADATA_API_KEY=previousKey;
     globalThis.fetch=previousFetch;
   }
+});
+
+test('findLimaEmail reports a missing API key before making a request',async()=>{
+ const previousKey=process.env.LIMADATA_API_KEY;
+ const previousFetch=globalThis.fetch;
+ delete process.env.LIMADATA_API_KEY;
+ globalThis.fetch=async()=>{throw Error('fetch must not run');};
+ try{await assert.rejects(()=>findLimaEmail('A Person','example.com'),error=>error.status===503&&/LIMADATA_API_KEY/.test(error.message));}
+ finally{if(previousKey===undefined)delete process.env.LIMADATA_API_KEY;else process.env.LIMADATA_API_KEY=previousKey;globalThis.fetch=previousFetch;}
+});
+
+test('findLimaEmail maps provider rate limits without swallowing them',async()=>{
+ const previousKey=process.env.LIMADATA_API_KEY;
+ const previousFetch=globalThis.fetch;
+ process.env.LIMADATA_API_KEY='test-key';
+ globalThis.fetch=async(url)=>String(url).endsWith('/credits/balance')
+  ?{status:200,ok:true,json:async()=>({balance:4})}
+  :{status:429,ok:false,json:async()=>({})};
+ try{await assert.rejects(()=>findLimaEmail('A Person','example.com'),error=>error.status===429&&/rate limit/.test(error.message));}
+ finally{if(previousKey===undefined)delete process.env.LIMADATA_API_KEY;else process.env.LIMADATA_API_KEY=previousKey;globalThis.fetch=previousFetch;}
+});
+
+test('firecrawl reports missing keys and preserves its 105-credit reserve',async()=>{
+ const previousKey=process.env.FIRECRAWL_API_KEY;
+ const previousFetch=globalThis.fetch;
+ delete process.env.FIRECRAWL_API_KEY;
+ try{await assert.rejects(()=>firecrawlSearch('renewable projects'),error=>error.status===503&&/FIRECRAWL_API_KEY/.test(error.message));}
+ finally{if(previousKey===undefined)delete process.env.FIRECRAWL_API_KEY;else process.env.FIRECRAWL_API_KEY=previousKey;}
+ process.env.FIRECRAWL_API_KEY='test-key';
+ let calls=0;
+ globalThis.fetch=async()=>{calls++;return {status:200,ok:true,json:async()=>({success:true,data:{remainingCredits:106}})};};
+ try{await assert.rejects(()=>firecrawlSearch('renewable projects'),error=>error.status===402&&/105-credit reserve/.test(error.message));assert.equal(calls,1);}
+ finally{if(previousKey===undefined)delete process.env.FIRECRAWL_API_KEY;else process.env.FIRECRAWL_API_KEY=previousKey;globalThis.fetch=previousFetch;}
+});
+
+test('perplexity reports a missing key and upstream rate limit clearly',async()=>{
+ const previousKey=process.env.PERPLEXITY_API_KEY;
+ const previousFetch=globalThis.fetch;
+ delete process.env.PERPLEXITY_API_KEY;
+ try{await assert.rejects(()=>perplexitySearch('renewable projects'),error=>error.status===503&&/PERPLEXITY_API_KEY/.test(error.message));}
+ finally{if(previousKey===undefined)delete process.env.PERPLEXITY_API_KEY;else process.env.PERPLEXITY_API_KEY=previousKey;}
+ process.env.PERPLEXITY_API_KEY='test-key';
+ globalThis.fetch=async()=>({status:429,ok:false,json:async()=>({})});
+ try{await assert.rejects(()=>perplexitySearch('renewable projects'),error=>error.status===429&&/rate limit/.test(error.message));}
+ finally{if(previousKey===undefined)delete process.env.PERPLEXITY_API_KEY;else process.env.PERPLEXITY_API_KEY=previousKey;globalThis.fetch=previousFetch;}
 });

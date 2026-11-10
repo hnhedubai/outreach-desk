@@ -71,6 +71,13 @@ test('Jev: a batch/array payload is rejected outright',async()=>{
   await assert.rejects(scoreWithJev({records:[]}), e=>e.status===400);
 });
 
+test('Jev reports a missing TypeSafe key instead of returning a score',async()=>{
+  const previous=process.env.TYPESAFE_API_KEY;
+  delete process.env.TYPESAFE_API_KEY;
+  try{await assert.rejects(()=>scoreWithJev(jevInput(...Object.values(jevFixture()))),e=>e.status===503&&/TYPESAFE_API_KEY/.test(e.message));}
+  finally{if(previous===undefined)delete process.env.TYPESAFE_API_KEY;else process.env.TYPESAFE_API_KEY=previous;}
+});
+
 // ---------- Model: validation, dedup, state-clearing ----------
 test('cleanDomain edge cases: ports, trailing dot, uppercase, credentials, length',()=>{
   assert.equal(cleanDomain('https://example.com:8080/path'), 'example.com');
