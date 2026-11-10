@@ -1,0 +1,15 @@
+{
+  "name": "outreach-desk",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.mjs",
+    "reset-password": "node --env-file-if-exists=.env reset-password.mjs",
+    "test": "node --test",
+    "verify": "npm run check && npm test",
+    "check": "node --check server.mjs && node --check model.mjs && node --check jev.mjs && node --check firecrawl.mjs && node --check research-providers.mjs && node --check auth.mjs && node --check reset-password.mjs && node --check public/app.js && node --check public/ui.js && node --check public/eligibility.js && node --check public/project.js && node --check public/workspace.js && node --check public/flow.js && node --check public/spreadsheet.js"
+  }
+}
