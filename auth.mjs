@@ -1,10 +1,9 @@
-import {createHash,randomBytes,scryptSync,timingSafeEqual} from 'node:crypto';
+import {randomBytes,scryptSync,timingSafeEqual} from 'node:crypto';
 import {readFile,writeFile,rename} from 'node:fs/promises';
 import {join} from 'node:path';
 
 const username='admin';
 const passwordFile=dataDir=>join(dataDir,'auth.json');
-const legacyHash=process.env.OUTREACH_ACCESS_HASH;
 const sessions=new Map();
 
 const passwordBytes=(password,salt)=>scryptSync(password,salt,32);
@@ -28,7 +27,7 @@ export async function readAuth(dataDir){
 }
 export async function ensureAuth(dataDir){
  const saved=await readAuth(dataDir);
- return saved||{legacy:true,username,configured:Boolean(legacyHash)};
+ return saved||{username,configured:false};
 }
 export async function verifyPassword(dataDir,password){
  if(typeof password!=='string')return false;
@@ -37,8 +36,7 @@ export async function verifyPassword(dataDir,password){
   if(saved?.salt&&saved.hash){
    return same(passwordBytes(password,Buffer.from(saved.salt,'base64')),Buffer.from(saved.hash,'base64'));
   }
-  if(!legacyHash)return false;
-  return same(createHash('sha256').update(Buffer.from(username+':'+password)).digest(),Buffer.from(legacyHash,'hex'));
+  return false;
  }catch{return false;}
 }
 export async function setPassword(dataDir,password){

@@ -4,7 +4,7 @@ import http from 'node:http';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {classifyStreamError,createApp} from '../server.mjs';
+import {classifyStreamError,createApp,csv} from '../server.mjs';
 import {setPassword} from '../auth.mjs';
 
 let dataDir;
@@ -185,4 +185,11 @@ test('Exa without a key returns a configure error, not a fake result',async()=>{
   const response=await request({method:'POST',path:'/api/search',headers:{Cookie:cookie,'Content-Type':'application/json'},body:JSON.stringify({workspace:'grynh2',source:'web',query:'renewable energy'})});
   assert.equal(response.status,503);assert.match(json(response).error,/EXA_API_KEY/);
  }finally{if(previous===undefined)delete process.env.EXA_API_KEY;else process.env.EXA_API_KEY=previous;}
+});
+
+test('audit CSV neutralizes spreadsheet formula prefixes',()=>{
+ for(const value of ['=SUM(1,1)','+1','-1','@cmd','\tformula','\rformula']){
+  assert.equal(csv(value),`"'${value.replace(/"/g,'""')}"`);
+ }
+ assert.equal(csv('ordinary'), '"ordinary"');
 });

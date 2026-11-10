@@ -1,7 +1,7 @@
 # Outreach Desk — Security
 
 Last reviewed: 2026-11-11
-Reviewed against: commit `9fa56a9` (baseline `cd90ef3`)
+Reviewed against: current hardening worktree after `d374e1c` (baseline `cd90ef3`)
 Scope of review: `auth.mjs`, `server.mjs`, `model.mjs`, `reset-password.mjs`, `public/*.js`
 
 This document describes the security posture of the Outreach Desk application: its
@@ -60,7 +60,7 @@ application one.
 
 ### Login flow
 - Single username `admin` (`auth.mjs:5`).
-- **Fail-closed**: if no `auth.json` exists and no legacy hash is configured, no
+- **Fail-closed**: if no `auth.json` exists, no
   password is accepted — the app cannot be logged into until one is set
   (`auth.mjs:33-43`). There is **no default or backdoor password**.
 - On success a fresh session token is issued (`server.mjs:201-202`).
@@ -164,15 +164,15 @@ and none remote-exploitable under the loopback threat model.
 
 | # | Severity | Finding | Location | Recommended action |
 |---|---|---|---|---|
-| 1 | Low | Legacy **unsalted single-round SHA-256** password path is used when `OUTREACH_ACCESS_HASH` is set and no `auth.json` exists. Brute-forceable; almost certainly unused given the scrypt reset flow. | `auth.mjs:40-41` | Remove the legacy branch, or gate it behind an explicit one-time migration flag. |
+| 1 | Resolved | Legacy **unsalted single-round SHA-256** password fallback was removed. Passwords now require the scrypt-backed `auth.json` flow. | `auth.mjs` | None; run `npm run reset-password` for an installation without `auth.json`. |
 | 2 | Low / info | No rate-limiting or lockout on `/api/auth/login`. | `server.mjs:197-205` | Optional: small in-memory failure counter with short backoff. Low priority — port is loopback-only and cross-site is blocked. |
-| 3 | Low | **CSV formula injection** in audit export: `csv()` quotes fields but does not neutralize leading `= + - @`. Affects only the operator's own downloaded file. | `server.mjs:176-181` | Prefix-guard values whose first character is `=`, `+`, `-`, or `@`. |
+| 3 | Resolved | Audit CSV values are now prefixed with an apostrophe when they begin with a spreadsheet formula/control prefix (`=`, `+`, `-`, `@`, tab or carriage return). | `server.mjs` | None. |
 | 4 | Low / info | Non-idempotent GETs (`/api/state`, `/api/audit`) can trigger daily worklist generation, which writes to the DB. Not CSRF-able (authed + `SameSite=Strict`). | `server.mjs:226,266` | Optional: move generation to the existing `setInterval` only. |
 | 5 | Info | Session cookie omits `Secure`. Correct for `http://localhost`. | `server.mjs:202` | Add `Secure` only if the app is ever served over TLS. |
 
 ### Status
-- Findings 1 and 3 are the two worth acting on; they are not yet fixed as of `9fa56a9`.
-- Findings 2, 4, 5 are accepted / optional for a local single-user tool.
+- Findings 1 and 3 were resolved in the current hardening worktree.
+- Findings 2, 4, 5 remain accepted / optional for a local single-user tool.
 
 ---
 

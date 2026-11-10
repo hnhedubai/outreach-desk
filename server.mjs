@@ -15,6 +15,11 @@ export function classifyStreamError(error,req){
   return {status:400,message:'The request was interrupted. Please try again.'};
  throw error;
 }
+export const csv=value=>{
+ const text=String(value??'');
+ const safe=/^[=+\-@\t\r]/.test(text)?"'"+text:text;
+ return '"'+safe.replace(/"/g,'""')+'"';
+};
 export async function createApp({db:providedDb,dataDir:providedDataDir,port:requestedPort}={}){
 const root=dirname(fileURLToPath(import.meta.url));
 const port=Number(requestedPort??process.env.PORT??8282);
@@ -173,7 +178,6 @@ async function lookupContactEmail(state,input){
  return {...result,contact:contact.id,expectedName:contact.name,expectedDomain:lead.domain};
 }
 const hash=value=>createHash('sha256').update(String(value)).digest('hex');
-const csv=value=>'"'+String(value??'').replace(/"/g,'""')+'"';
 function exportAudit(ws,project,from,to,format){
  const rows=ws.audit.filter(e=>(!project||e.project===project)&&(!from||e.at.slice(0,10)>=from)&&(!to||e.at.slice(0,10)<=to)).map(e=>({
   time:e.at,project:e.project,action:e.type,channel:e.channel||'',lead:e.leadId?hash(e.leadId):'',contact:e.email?hash(e.email):''
