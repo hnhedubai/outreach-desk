@@ -16,13 +16,13 @@ putting the keys in the CI job environment — would actively break the test sui
 | Fact | Evidence |
 | --- | --- |
 | Repo `hnhedubai/codex-projects` is **public** | `GET /repos/... ` → `private: false` |
-| Default branch `main`, **not protected** | `GET /branches/main/protection` → HTTP 404 `Branch not protected` |
+| Default branch `main`, **protected** | `GET /branches/main/protection` → required status check `Verify` (strict), required PR reviews; `enforce_admins` disabled |
 | Workflow live: `Outreach Desk`, 1 file | `actions/workflows` → `total_count: 1`, state `active` |
 | CI green from the first run | run #1, event `push`, sha `aa53459`, `completed` / `success`, 7 s |
-| Actions secrets: **none** | `actions/secrets` → `total_count: 0` |
+| Actions secrets: **none at repo level** | `actions/secrets` → `total_count: 0`. The 5 provider keys are scoped to the `production` environment instead |
 | Self-hosted runners: none | `actions/runners` → `total_count: 0` |
-| No dependencies, no lockfile | `outreach-desk/` has no `package-lock.json`, no `node_modules` |
-| Runtime | Node `>=24`, built-ins + `node:sqlite`; CI needs no `npm install` |
+| One dependency, lockfile present | `pg@^8.23.1` + `package-lock.json` (14 resolved packages). CI installs nothing — `pg` is only imported when `DATABASE_URL` is set, and CI never sets it |
+| Runtime | Node `>=24`; SQLite via built-in `node:sqlite`, Postgres via lazy `pg`. CI needs no `npm install` |
 
 The `verify` job runs `npm run verify` = `node --check` (syntax) + `node --test`
 against `outreach-desk/test/`.
