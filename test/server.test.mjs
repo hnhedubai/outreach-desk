@@ -5,7 +5,7 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {classifyStreamError,createApp,csv} from '../server.mjs';
-import {setPassword} from '../auth.mjs';
+import {ensureAuth,setPassword} from '../auth.mjs';
 
 let dataDir;
 let app;
@@ -43,11 +43,27 @@ test('GET /api/auth/status returns the public authentication shape',async()=>{
  assert.equal(response.status,200);
  assert.deepEqual(Object.keys(json(response)).sort(),['authenticated','configured']);
  assert.equal(typeof json(response).authenticated,'boolean');
- assert.equal(typeof json(response).configured,'boolean');
+ // before() sets a password, so this must be true. Asserting only the type is what let
+ // a hardcoded false slip through: auth.configured was never written by setPassword.
+ assert.equal(json(response).configured,true);
  assert.match(response.headers['content-security-policy']||'',/default-src 'self'/);
  assert.equal(response.headers['x-content-type-options'],'nosniff');
  assert.equal(response.headers['referrer-policy'],'no-referrer');
  assert.equal(response.headers['cache-control'],'no-store');
+});
+
+test('ensureAuth derives configured from the stored password rather than a missing field',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'outreach-desk-authcfg-'));
+ try{
+  assert.equal((await ensureAuth(dir)).configured,false,'no auth.json yet means unconfigured');
+  await setPassword(dir,'correct horse battery staple');
+  const saved=await ensureAuth(dir);
+  assert.equal(saved.configured,true,'a stored salt+hash must report configured');
+  assert.equal(saved.username,'admin');
+  assert.ok(saved.salt&&saved.hash,'password material is preserved on the returned object');
+ }finally{
+  await rm(dir,{recursive:true,force:true});
+ }
 });
 
 test('reset status reports configured and login sets a strict HttpOnly session cookie',async()=>{

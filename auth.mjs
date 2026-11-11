@@ -27,7 +27,11 @@ export async function readAuth(dataDir){
 }
 export async function ensureAuth(dataDir){
  const saved=await readAuth(dataDir);
- return saved||{username,configured:false};
+ if(!saved)return {username,configured:false};
+ // setPassword writes username/salt/hash/changedAt and never a `configured` field, so
+ // the flag has to be derived - reading auth.configured directly always yielded false
+ // even with a valid password on disk.
+ return {...saved,configured:Boolean(saved.salt&&saved.hash)};
 }
 export async function verifyPassword(dataDir,password){
  if(typeof password!=='string')return false;
