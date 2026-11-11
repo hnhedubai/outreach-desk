@@ -23,16 +23,59 @@ function openSqlite(providedDb,dataDir){
  };
 }
 
+// Neon/Postgres resilience. A transient fault is a connection-layer failure (cold wake,
+// network blip, server shutdown), not a bug in our query — so it is retried, and a
+// sustained outage is surfaced as a retryable 503 rather than an opaque 500.
+const TRANSIENT_CODES=new Set(['ETIMEDOUT','ECONNRESET','ECONNREFUSED','ENOTFOUND','EAI_AGAIN','53300','57P01','57P02','57P03','58000','58006','08000','08001','08003','08006','08007','08P01']);
+const TRANSIENT_MESSAGE=/connection timeout|timeout exceeded|could not connect|server closed the connection|retry transaction|terminating connection|no connection to the server|starting up|in recovery mode|cannot connect now/i;
+export function isTransientDbError(error){
+ if(!error)return false;
+ if(TRANSIENT_CODES.has(error.code))return true;
+ return TRANSIENT_MESSAGE.test(String(error.message||''));
+}
+// Genuine errors (bad SQL, constraint violations) stay statusless so the server logs the
+// stack; only transient faults become a friendly, retryable 503.
+export function classifyDbError(error){
+ if(!isTransientDbError(error))return error;
+ return Object.assign(new Error('The database is unavailable, likely waking from idle. Please retry in a moment.'),{status:503,retryable:true,cause:error});
+}
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+// Exponential backoff on transient faults only; a non-transient error rethrows immediately.
+export async function withRetry(fn,{retries=2,delay=400}={}){
+ let lastError;
+ for(let attempt=0;attempt<=retries;attempt++){
+  try{return await fn();}
+  catch(error){
+   lastError=error;
+   if(!isTransientDbError(error)||attempt===retries)break;
+   await sleep(delay*2**attempt);
+  }
+ }
+ throw lastError;
+}
+
 async function openPostgres(url){
  const {Pool}=await import('pg');
- const pool=new Pool({connectionString:url,ssl:{require:true},max:5});
- await pool.query(PG_SCHEMA);
+ // Neon serverless autosuspends when idle; the first connection can take far longer than
+ // pg's 10s default connect timeout — that is what surfaces as a "connection timeout".
+ // Widen the connect window to cover a cold wake, bound every query, and cap the pool.
+ const pool=new Pool({
+  connectionString:url,ssl:{require:true},max:5,
+  connectionTimeoutMillis:30_000,
+  idleTimeoutMillis:30_000,
+  query_timeout:15_000,
+  statement_timeout:15_000,
+ });
+ // Every pool call is retried on transient faults and classified on final failure.
+ const run=(sql,params)=>withRetry(()=>pool.query(sql,params)).catch(classifyDbError);
+ await run(PG_SCHEMA);
  return {
   backend:'postgres',
-  async getState(){const r=await pool.query('SELECT revision,document FROM workspace_state WHERE id=1');return r.rows[0]?{revision:r.rows[0].revision,document:r.rows[0].document}:null;},
-  async seed(document){await pool.query('INSERT INTO workspace_state(id,revision,document) VALUES (1,0,$1) ON CONFLICT (id) DO NOTHING',[document]);},
-  async save(revision,document,expectedRevision){const r=await pool.query('UPDATE workspace_state SET revision=$1,document=$2 WHERE id=1 AND revision=$3',[revision,document,expectedRevision]);return r.rowCount===1;},
-  async close(){await pool.end();},
+  async getState(){const r=await run('SELECT revision,document FROM workspace_state WHERE id=1');return r.rows[0]?{revision:r.rows[0].revision,document:r.rows[0].document}:null;},
+  async seed(document){await run('INSERT INTO workspace_state(id,revision,document) VALUES (1,0,$1) ON CONFLICT (id) DO NOTHING',[document]);},
+  async save(revision,document,expectedRevision){const r=await run('UPDATE workspace_state SET revision=$1,document=$2 WHERE id=1 AND revision=$3',[revision,document,expectedRevision]);return r.rowCount===1;},
+  // Bound shutdown so a connection stuck mid-wake cannot hang process exit.
+  async close(){await Promise.race([pool.end(),sleep(10_000)]);},
  };
 }
 
