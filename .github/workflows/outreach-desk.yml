@@ -1,0 +1,58 @@
+name: Outreach Desk
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# Single concurrent run per ref; cancels superseded in-progress runs.
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Assert provider secrets are absent
+        shell: bash
+        run: |
+          test -z "${EXA_API_KEY:-}"
+          test -z "${FIRECRAWL_API_KEY:-}"
+          test -z "${PERPLEXITY_API_KEY:-}"
+          test -z "${LIMADATA_API_KEY:-}"
+          test -z "${TYPESAFE_API_KEY:-}"
+          test -z "${TYPESAFE_MODEL:-}"
+      # outreach-desk has no dependencies or lockfile (Node built-ins + node:sqlite),
+      # so there is nothing to install. verify = node --check (syntax) + node --test.
+      - name: Verify
+        run: npm run verify
+
+  live-smoke:
+    name: Live provider smoke test
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run live provider smoke test
+        env:
+          EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          LIMADATA_API_KEY: ${{ secrets.LIMADATA_API_KEY }}
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+        run: node scripts/live-smoke.mjs
