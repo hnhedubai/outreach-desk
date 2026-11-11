@@ -83,7 +83,7 @@ async function body(req,limit=3_000_000){
   return value;
  }catch{throw Object.assign(new Error('Expected a valid JSON object.'),{status:400});}
 }
-const paths=new Map([['/','index.html'],['/index.html','index.html'],['/app.js','app.js'],['/style.css','style.css'],['/spreadsheet.js','spreadsheet.js'],['/ui.js','ui.js'],['/eligibility.js','eligibility.js'],['/project.js','project.js'],['/workspace.js','workspace.js'],['/flow.js','flow.js'],['/fonts/Inter.ttf','fonts/Inter.ttf'],['/fonts/SpaceGrotesk.ttf','fonts/SpaceGrotesk.ttf']]);
+const paths=new Map([['/','index.html'],['/index.html','index.html'],['/app.js','app.js'],['/css/style.css','css/style.css'],['/spreadsheet.js','spreadsheet.js'],['/ui.js','ui.js'],['/eligibility.js','eligibility.js'],['/project.js','project.js'],['/workspace.js','workspace.js'],['/flow.js','flow.js'],['/fonts/Inter.ttf','fonts/Inter.ttf'],['/fonts/SpaceGrotesk.ttf','fonts/SpaceGrotesk.ttf']]);
 const mime={html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',ttf:'font/ttf'};
 const keyAvailable=()=>Boolean(process.env.EXA_API_KEY);
 const scoring=new Set();
