@@ -118,3 +118,12 @@ test('a transport failure surfaces as an error, not a low score',async()=>{
   e=>e.status===502
  );
 });
+
+test('an unparseable or null Jev body is rejected as 502, not a crash',async()=>{
+ const {project,lead}=fixture();
+ process.env.TYPESAFE_API_KEY='test-key';
+ globalThis.fetch=async()=>({ok:true,status:200,json:async()=>{throw new Error('bad json');}});
+ try{
+  await assert.rejects(()=>scoreWithJev(jevInput(project,lead)),e=>e.status===502);
+ }finally{globalThis.fetch=realFetch;process.env.TYPESAFE_API_KEY=realKey;}
+});

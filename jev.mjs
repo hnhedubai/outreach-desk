@@ -110,6 +110,7 @@ export async function scoreWithJev(input){
   if(response.status===429)throw error(429,'TypeSafe rate limit reached. Try again later.');
   if(!response.ok)throw error(502,'TypeSafe returned HTTP '+response.status+'.');
   const payload = await response.json().catch(()=>null);
+  if(!payload)throw error(502,'TypeSafe returned an invalid Jev response.');
   const answers=payload?.answers||{};
   const seeking = payload?.answers?.seekingInvestment;
   const componentKeys=['scaleGeography','developmentStage','permitsOfftake','bankabilityCapitalNeed'];

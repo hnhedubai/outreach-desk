@@ -5,6 +5,7 @@ import {jevInput,scoreWithJev} from './jev.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
 const db=new DatabaseSync(join(root,'data','outreach.sqlite'));
+db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;');
 const get=db.prepare('SELECT revision,document FROM workspace_state WHERE id=1');
 const current=get.get();
 if(!current)throw Error('Outreach Desk state is unavailable.');

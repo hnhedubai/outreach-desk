@@ -32,15 +32,25 @@ db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT 
 const get=db.prepare('SELECT revision,document FROM workspace_state WHERE id=1');
 if(!get.get())db.prepare('INSERT OR IGNORE INTO workspace_state VALUES (1,0,?)').run(JSON.stringify(createState()));
 const update=db.prepare('UPDATE workspace_state SET revision=?,document=? WHERE id=1 AND revision=?');
-const read=()=>{const row=get.get();return {...JSON.parse(row.document),revision:row.revision};};
-const load=()=>{
+const read=()=>{
+ const row=get.get();
+ try{return {...JSON.parse(row.document),revision:row.revision};}
+ catch{throw requestError(500,'Saved workspace data is unreadable. Restore it from a backup.');}
+};
+// Serialize state for storage; a state larger than V8's max string length is reported, not crashed.
+const encodeState=state=>{
+ try{return JSON.stringify(state);}
+ catch{throw requestError(507,'The workspace is too large to save. Reduce its size and try again.');}
+};
+const maintain=()=>{
  const state=read();
  const reconciled=reconcileAssignments(state);
  const generated=runDaily(state);
  if(!reconciled&&!generated)return state;
  const previous=state.revision;state.revision++;
- return update.run(state.revision,JSON.stringify(state),previous).changes===1?state:read();
+ return update.run(state.revision,encodeState(state),previous).changes===1?state:read();
 };
+const load=()=>maintain();
 const send=(res,status,data,type='application/json; charset=utf-8')=>{
  if(res.destroyed||res.writableEnded||res.headersSent)return;
  let payload=data;
@@ -118,10 +128,10 @@ async function scoreLead(input,revision){
    throw requestError(409,'Targeting or lead evidence changed during scoring. Review and try again.');
   }
   recordJevFit(target.workspace,target.project,target.lead,fit);
-  const previous=latest.revision++;
-  if(update.run(latest.revision,JSON.stringify(latest),previous).changes!==1){
-   throw requestError(409,'The workspace changed during scoring. Refresh and try again.');
-  }
+   const previous=latest.revision++;
+   if(update.run(latest.revision,encodeState(latest),previous).changes!==1){
+    throw requestError(409,'The workspace changed during scoring. Refresh and try again.');
+   }
   return stateResponse(latest,{score:fit.score});
  }finally{scoring.delete(key);}
 }
@@ -254,7 +264,7 @@ const server=createServer(async(req,res)=>{
     const result=perform(state,input.type,input.input);
     reconcileAssignments(state);
     const previous=state.revision;state.revision++;
-    if(update.run(state.revision,JSON.stringify(state),previous).changes!==1){send(res,409,{error:'The workspace changed. Refresh and try again.'});return;}
+    if(update.run(state.revision,encodeState(state),previous).changes!==1){send(res,409,{error:'The workspace changed. Refresh and try again.'});return;}
     send(res,200,stateResponse(state,result));return;
   }
   if(u.pathname==='/api/search'){
@@ -278,8 +288,12 @@ const server=createServer(async(req,res)=>{
   send(res,error.status||500,{error:error.status?error.message:'The local app could not complete that request.'});
   if(!error.status)console.error(error.stack);
  }
-});
-const dailyInterval=setInterval(()=>{try{load();}catch(error){console.error('Daily worklist:',error.message);}},60_000);
+ });
+// Cap stalled/slow-client connections so they cannot pile up on a low-resource machine.
+server.requestTimeout=120_000;
+server.headersTimeout=60_000;
+server.keepAliveTimeout=5_000;
+const dailyInterval=setInterval(()=>{try{maintain();}catch(error){console.error('Daily worklist:',error.message);}},300_000);
 dailyInterval.unref();
 return {
  server,
@@ -308,6 +322,8 @@ if(isMain){
   process.exitCode=1;
  });
  process.on('unhandledRejection',reason=>console.error('Unhandled rejection:',reason&&reason.stack||reason));
+ // Keep the local app alive if an error escapes a request; log it and let the process continue.
+ process.on('uncaughtException',error=>console.error('Uncaught exception:',error&&error.stack||error));
  for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{
   app.server.closeAllConnections?.();
   app.server.close(()=>process.exit(0));
