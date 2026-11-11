@@ -73,7 +73,8 @@ managing outbound outreach worklists. Single-user, loopback-only. SQLite via the
 1. Locate the owning module from §3; keep the change there.
 2. If you touch a behaviour in §4, update or add a test in `test/` that locks it.
 3. Run `npm run verify`. It must pass before you report completion.
-4. Do not commit; the git root is the parent `codex-projects` tree — leave SCM to the operator.
+4. Commit on a focused branch once `npm run verify` is green; this repository is the git root.
+   Do not push or open a pull request unless the operator asks for it.
 
 ## 7. Testing notes
 - Tests use Node's built-in runner (`node --test`, `node:assert/strict`). No test framework.
