@@ -28,7 +28,7 @@ Run npm run check to validate the JavaScript.
 
 ## Known limitations / accepted risk
 
-The browser-side XLSX/drag-and-drop import path is exercised through the Node import tests, including duplicate-domain counting and preview-versus-result behavior, but it has no DOM/browser test harness. The render error boundary is present and CSP-safe, but its runtime throw/reload behavior is not covered by an automated DOM test. Both remain open because closing them requires a DOM/browser harness such as jsdom or Playwright, which would break the app’s deliberate zero-dependency principle.
+The browser-side XLSX/drag-and-drop import path is exercised through the Node import tests, including duplicate-domain counting and preview-versus-result behavior, but it has no DOM/browser test harness. The render error boundary is present and CSP-safe, but its runtime throw/reload behavior is not covered by an automated DOM test. Both remain open because closing them requires a DOM/browser harness such as jsdom or Playwright, which would break the app’s deliberate minimal-dependency policy, under which `pg` is currently the only approved exception (AGENTS.md §5).
 
 ## Contributing
 

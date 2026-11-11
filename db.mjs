@@ -1,6 +1,7 @@
 // Single async interface over the workspace_state table.
 // Backend is chosen by env: DATABASE_URL set -> Postgres (Neon); otherwise SQLite.
-// pg is imported lazily so SQLite mode keeps the project dependency-free.
+// pg is imported lazily: the SQLite path loads no packages at all, and pg is only required
+// when DATABASE_URL selects Postgres. It is the project's one approved dependency (AGENTS.md §5).
 import {join} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 

@@ -4,15 +4,20 @@ Run this after every Codex change to `outreach-desk/`. The detailed rules live i
 `AGENTS.md` (§4 invariants) and `Jev_Scoring_Logic.md`; this is the quick pass/fail list.
 
 ## 1. Automated gate (must be green)
-- [ ] `npm run verify` → `check` OK, all tests pass, **0 skipped** (baseline: 29 tests).
+- [ ] `npm run verify` → `check` OK, all tests pass, **0 skipped** (baseline: 78 tests).
 - [ ] `npm test` count has not silently dropped (a removed/weakened test is a red flag).
-- [ ] No new `node_modules` / dependency added — `package.json` `dependencies` stays empty.
-      (This project is deliberately zero-dependency, Node 24 built-ins only.)
+- [ ] No new dependency added beyond the one approved exception. `package.json`
+      `dependencies` must contain exactly `pg@^8.23.1` and nothing else — `pg` exists solely
+      for the Neon/Postgres backend and is imported lazily in `db.mjs`. The SQLite path stays
+      Node-built-ins only. Anything further needs an explicit decision (AGENTS.md §5).
 
 ## 2. Invariants (eyeball the diff — from AGENTS.md §4)
-- [ ] **Loopback-only**: Host guard still rejects any non-`127.0.0.1` / `localhost` host,
-      and validates against the server's actual bound port.
-- [ ] **CSRF**: `requirePost` still enforces JSON `Content-Type` + matching `Origin`.
+- [ ] **Loopback-only by default**: Host guard still rejects any non-`127.0.0.1` /
+      `localhost` host and validates against the server's actual bound port. If the change
+      touches `OUTREACH_MODE=server`, confirm it still fails closed when
+      `OUTREACH_ALLOWED_HOSTS` is empty and that the default path is unchanged.
+- [ ] **CSRF**: `requirePost` still enforces JSON `Content-Type` + an `Origin` matching
+      `<scheme>://<host>` (`http` locally, `X-Forwarded-Proto`-derived in server mode).
 - [ ] **Response headers**: CSP / `X-Content-Type-Options: nosniff` / `Referrer-Policy:
       no-referrer` / `Cache-Control: no-store` unchanged.
 - [ ] **Auth**: scrypt hashing + constant-time compare, min-10 password, session cookie stays

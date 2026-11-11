@@ -221,10 +221,16 @@ and none remote-exploitable under the loopback threat model.
   app does not encrypt data at rest.
 - **Do not** expose the port beyond loopback or front it with a public reverse proxy
   without adding TLS, a `Secure` cookie, and (if multi-user) real access controls —
-  none of which this app is designed for.
-- **Dependencies:** the app is intentionally dependency-free. Adding any dependency
-  (e.g. a DOM test harness such as jsdom/Playwright) should be a deliberate decision
-  and reviewed, since it changes the supply-chain surface.
+  none of which this app is designed for. `OUTREACH_MODE=server` (§1.1) relaxes the bind
+  and `Host` checks but does **not** supply any of those, so it is not a green light to
+  publish the app.
+- **Dependencies:** the app is deliberately minimal, not dependency-free. It runs on Node
+  built-ins plus one approved exception, `pg@^8.23.1`, required only by the Neon/Postgres
+  backend and imported lazily so SQLite mode loads nothing external. That exception is
+  recorded in `AGENTS.md` §5 and `CHECKLIST.md` §1 — treat it as the complete list. Adding
+  any further dependency (e.g. a DOM test harness such as jsdom/Playwright) should be a
+  deliberate, reviewed decision, since it changes the supply-chain surface, and must update
+  every file above in the same change.
 
 ---
 
@@ -232,4 +238,6 @@ and none remote-exploitable under the loopback threat model.
 
 This is a local internal tool. If you find a security issue, describe the exact file and
 line and a reproduction, and open it as a task for the maintainer. Prefer fixes that keep
-the zero-dependency, loopback-only properties intact.
+the minimal-dependency policy in `AGENTS.md` §5 (`pg` being the one approved exception) and
+the default loopback-only behaviour intact. `OUTREACH_MODE=server` is the narrow, opt-in
+exception to the latter and is documented in §1.1.

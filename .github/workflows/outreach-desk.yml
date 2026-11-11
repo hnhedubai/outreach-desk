@@ -32,8 +32,9 @@ jobs:
           test -z "${LIMADATA_API_KEY:-}"
           test -z "${TYPESAFE_API_KEY:-}"
           test -z "${TYPESAFE_MODEL:-}"
-      # outreach-desk has no dependencies or lockfile (Node built-ins + node:sqlite),
-      # so there is nothing to install. verify = node --check (syntax) + node --test.
+      # The only dependency is pg (Neon/Postgres backend), imported lazily in db.mjs.
+      # CI never sets DATABASE_URL, so nothing loads pg and there is nothing to install.
+      # verify = node --check (syntax) + node --test.
       - name: Verify
         run: npm run verify
 
