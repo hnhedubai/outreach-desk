@@ -10,6 +10,13 @@
 // Every endpoint, auth header and response shape below is copied from a call this
 // application already makes. Do not add a probe that is not already proven in the app.
 
+import { enforceTlsVerification } from '../db.mjs';
+
+// Verification is enforced here as well: an inherited NODE_TLS_REJECT_UNAUTHORIZED=0 would let
+// every probe below "succeed" over an unverified connection, which proves nothing about the real
+// credential path.
+const tlsOverrideDiscarded = enforceTlsVerification();
+
 const timeoutMs = 15000;
 
 const configured = name => typeof process.env[name] === 'string' && process.env[name].trim() !== '';
@@ -114,7 +121,7 @@ const checks = [
   ['TypeSafe', checkTypeSafe, false]
 ];
 
-console.log(`TLS certificate verification: ${process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0' ? 'DISABLED (untrusted run)' : 'active'}`);
+console.log(`TLS certificate verification: ${tlsOverrideDiscarded ? 'active (inherited NODE_TLS_REJECT_UNAUTHORIZED=0 discarded)' : 'active'}`);
 
 let failed = false;
 for(const [name, check, billable] of checks){

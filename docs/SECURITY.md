@@ -231,6 +231,20 @@ and none remote-exploitable under the loopback threat model.
   any further dependency (e.g. a DOM test harness such as jsdom/Playwright) should be a
   deliberate, reviewed decision, since it changes the supply-chain surface, and must update
   every file above in the same change.
+- **Outbound TLS verification is not configurable.** `server.mjs` and
+  `scripts/live-smoke.mjs` call `enforceTlsVerification()` (`db.mjs`) at startup, which deletes
+  an inherited `NODE_TLS_REJECT_UNAUTHORIZED=0` and prints a note when it does. Sandboxes and
+  agent shells commonly set that variable for their own proxying, so any process launched from
+  one would otherwise send lead PII to Exa, Perplexity, Firecrawl, LimaData and TypeSafe — and
+  the Neon connection — over an unverified connection. There is deliberately no flag to disable
+  verification again; if a controlled run ever needs that, add it as an explicit, named option
+  rather than relying on ambient environment. This concerns *outbound* verification only;
+  serving the app itself still has no TLS, per the item above.
+- **Store selection is announced, and can be made mandatory.** The startup line prints
+  `store: Neon Postgres (DATABASE_URL)` or `store: local SQLite <path>`. SQLite is a fallback,
+  not a replica, so a clone or shell missing `DATABASE_URL` would otherwise serve a stale
+  document as though it were current. Set `OUTREACH_REQUIRE_NEON=1` wherever Neon is the source
+  of truth and startup fails closed instead.
 
 ---
 

@@ -1,9 +1,21 @@
 // Single async interface over the workspace_state table.
 // Backend is chosen by env: DATABASE_URL set -> Postgres (Neon); otherwise SQLite.
+// The SQLite file is a fallback, not a replica - see openStore and OUTREACH_REQUIRE_NEON.
 // pg is imported lazily: the SQLite path loads no packages at all, and pg is only required
 // when DATABASE_URL selects Postgres. It is the project's one approved dependency (AGENTS.md §5).
 import {join} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
+
+// An inherited NODE_TLS_REJECT_UNAUTHORIZED=0 - set by CI sandboxes and agent shells for their
+// own proxying - silently disables certificate verification for every HTTPS request this process
+// makes, including the Neon connection and each provider call that carries lead PII. This app does
+// not honour it: verification is always enforced, and the variable is deleted so the lazily
+// imported pg client cannot inherit it either. Returns true when an override was discarded.
+export function enforceTlsVerification(){
+ const wasDisabled=process.env.NODE_TLS_REJECT_UNAUTHORIZED==='0';
+ if(wasDisabled)delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+ return wasDisabled;
+}
 
 const SQLITE_SCHEMA='PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS workspace_state(id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL, document TEXT NOT NULL)';
 const PG_SCHEMA='CREATE TABLE IF NOT EXISTS workspace_state(id integer PRIMARY KEY CHECK(id=1), revision integer NOT NULL, document text NOT NULL)';
@@ -84,6 +96,10 @@ async function openPostgres(url){
 export async function openStore({providedDb,dataDir}={}){
  const url=process.env.DATABASE_URL;
  if(url)return openPostgres(url);
+ // SQLite is where a missing DATABASE_URL lands, not where it is meant to be: the local file can
+ // hold an older document while Neon holds the live one. Set OUTREACH_REQUIRE_NEON=1 wherever the
+ // Neon store is the source of truth, and startup fails loudly instead of serving stale state.
+ if(!providedDb&&process.env.OUTREACH_REQUIRE_NEON==='1')throw Error('DATABASE_URL is not set, but OUTREACH_REQUIRE_NEON=1 forbids the local SQLite fallback. Refusing to start: the SQLite document may be stale and would otherwise be served as current. Set DATABASE_URL, or unset OUTREACH_REQUIRE_NEON to use the local store deliberately.');
  if(!dataDir)throw Error('openStore requires dataDir when DATABASE_URL is not set.');
  return openSqlite(providedDb,dataDir);
 }
