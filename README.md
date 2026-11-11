@@ -4,7 +4,7 @@ Outreach Desk is a standalone local application for researching companies and ma
 
 ## Run
 
-Use Node.js 24 or later. Run npm start from this folder, then open http://localhost:8282/. No package installation is required. The server listens on loopback. The database is data/outreach.sqlite. Set OUTREACH_DATA_DIR to use another storage directory and PORT to use another local port.
+Use Node.js 24 or later. Run npm start from this folder, then open http://localhost:8282/. With the default SQLite store no packages are needed; to run against a Neon Postgres `DATABASE_URL`, run `npm install` first (it adds `pg`). The server listens on loopback. The database is data/outreach.sqlite. Set OUTREACH_DATA_DIR to use another storage directory and PORT to use another local port.
 
 Before the first login, run `npm run reset-password` from this folder and choose a password of at least 10 characters. Log in as `admin`. The password is stored as a salted scrypt hash in `auth.json` inside the configured data directory.
 
@@ -29,4 +29,24 @@ Run npm run check to validate the JavaScript.
 ## Known limitations / accepted risk
 
 The browser-side XLSX/drag-and-drop import path is exercised through the Node import tests, including duplicate-domain counting and preview-versus-result behavior, but it has no DOM/browser test harness. The render error boundary is present and CSP-safe, but its runtime throw/reload behavior is not covered by an automated DOM test. Both remain open because closing them requires a DOM/browser harness such as jsdom or Playwright, which would break the app’s deliberate zero-dependency principle.
+
+## Contributing
+
+Changes land on `main` through a pull request. `main` is protected: a PR is required, the **Verify** status check must pass, and the branch must be up to date with `main` before it can be merged. Force-pushes and branch deletions on `main` are blocked.
+
+Recommended flow:
+
+1. Start from the latest `main`: `git switch -c feat/<short-name>` (use `fix/`, `docs/`, etc. as appropriate).
+2. Make and commit your changes.
+3. Push the branch: `git push -u origin feat/<short-name>`.
+4. Open a PR: `gh pr create --fill`.
+5. Wait for **Verify** to pass, then merge: `gh pr merge --squash --delete-branch`.
+
+Local setup and checks:
+
+- `npm install` (only needed to add `pg` for Postgres; the SQLite path needs no packages).
+- `npm run check` validates the JavaScript; `npm test` runs the suite. `npm run verify` runs both.
+- Tests use the SQLite store and require no credentials or network.
+
+The app reads `DATABASE_URL` when set (Neon Postgres) and falls back to the local SQLite file otherwise. `.env` and `node_modules/` are gitignored — never commit them or any secret. The `Outreach Desk` GitHub Actions workflow runs the **Verify** job on every push and pull request.
 
