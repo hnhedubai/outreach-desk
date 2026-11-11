@@ -20,10 +20,19 @@ export const csv=value=>{
  const safe=/^[=+\-@\t\r]/.test(text)?"'"+text:text;
  return '"'+safe.replace(/"/g,'""')+'"';
 };
+// OUTREACH_MODE=server relaxes the loopback-only guards so the app can sit behind a
+// hosting proxy. It is opt-in: with the flag unset every guard below behaves exactly
+// as it does for a local single-user install.
+const serverMode=()=>process.env.OUTREACH_MODE==='server';
+const allowedHosts=()=>new Set(String(process.env.OUTREACH_ALLOWED_HOSTS??'').split(',').map(host=>host.trim().toLowerCase()).filter(Boolean));
+// A proxy terminates TLS, so the visible request scheme is http:// but the browser's
+// Origin header carries https://. Trust the forwarded proto, never the raw socket.
+const requestScheme=req=>serverMode()?(String(req.headers['x-forwarded-proto']??'').split(',')[0].trim()||'https'):'http';
 export async function createApp({db:providedDb,dataDir:providedDataDir,port:requestedPort}={}){
-const root=dirname(fileURLToPath(import.meta.url));
-const port=Number(requestedPort??process.env.PORT??8282);
-const dataDir=providedDataDir||process.env.OUTREACH_DATA_DIR||join(root,'data');
+ const root=dirname(fileURLToPath(import.meta.url));
+ const port=Number(requestedPort??process.env.PORT??8282);
+ const dataDir=providedDataDir||process.env.OUTREACH_DATA_DIR||join(root,'data');
+ if(serverMode()&&allowedHosts().size===0)throw new Error('OUTREACH_MODE=server requires OUTREACH_ALLOWED_HOSTS to list the public hostnames, comma-separated.');
 await mkdir(dataDir,{recursive:true});
 const store=await openStore({providedDb,dataDir});
 const auth=await ensureAuth(dataDir);
@@ -134,7 +143,7 @@ async function scoreLead(input,revision){
 }
 function requirePost(req){
  if(req.method!=='POST'||!req.headers['content-type']?.startsWith('application/json'))throw Object.assign(new Error('Use a JSON POST.'),{status:405});
- if(req.headers.origin!=='http://'+req.headers.host)throw Object.assign(new Error('Cross-origin requests are unavailable.'),{status:403});
+ if(req.headers.origin!==requestScheme(req)+'://'+req.headers.host)throw Object.assign(new Error('Cross-origin requests are unavailable.'),{status:403});
 }
 async function search(input,state){
  const ws=state.workspaces.find(x=>x.id===input.workspace);
@@ -193,8 +202,10 @@ function exportAudit(ws,project,from,to,format){
 }
 const server=createServer(async(req,res)=>{
  try{
-  const boundPort=server.address()?.port;
-  if(!['127.0.0.1:'+boundPort,'localhost:'+boundPort].includes(req.headers.host)){send(res,403,{error:'Use the local app address.'});return;}
+   const boundPort=server.address()?.port;
+   const hostHeader=String(req.headers.host??'').toLowerCase();
+   const hostAllowed=serverMode()?allowedHosts().has(hostHeader):['127.0.0.1:'+boundPort,'localhost:'+boundPort].includes(hostHeader);
+   if(!hostAllowed){send(res,403,{error:serverMode()?'Unknown app address.':'Use the local app address.'});return;}
   const u=new URL(req.url,'http://localhost');
   if(u.pathname==='/api/auth/status'&&req.method==='GET'){
    send(res,200,{authenticated:Boolean(sessionFrom(req)),configured:Boolean(auth.configured)});
@@ -300,7 +311,7 @@ return {
   const onListening=()=>{server.off('error',onError);resolveListen(server);};
   server.once('error',onError);
   server.once('listening',onListening);
-  server.listen(port,'127.0.0.1',()=>console.log('Outreach Desk · http://localhost:'+server.address().port+'/'));
+   server.listen(port,serverMode()?'0.0.0.0':'127.0.0.1',()=>console.log(serverMode()?'Outreach Desk · listening on 0.0.0.0:'+server.address().port+' (server mode)':'Outreach Desk · http://localhost:'+server.address().port+'/'));
  }),
  close:()=>new Promise(resolveClose=>{
   const finish=()=>{clearInterval(dailyInterval);Promise.resolve(store.close()).then(()=>resolveClose(),()=>resolveClose());};
