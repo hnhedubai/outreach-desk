@@ -18,7 +18,10 @@ Outreach Desk is a **single-workspace, single-user, local application**. It:
 - Binds only to the loopback interface (`127.0.0.1`) — never to a network address.
 - Stores all data in a local SQLite file under the data directory
   (`OUTREACH_DATA_DIR`, default `./data`).
-- Has **zero runtime dependencies** (Node built-ins only; Node >= 24).
+- Runs on Node built-ins plus **one declared dependency**, `pg`. It is imported lazily
+  and only when `DATABASE_URL` selects the Postgres/Neon backend (`db.mjs:58`), so SQLite
+  mode loads nothing external — but `pg` and its 13 transitive packages are installed
+  regardless. Requires Node >= 24.
 - Does **not** send email, sync Gmail, or integrate with Slack / HubSpot / Google
   Postmaster / Google Sheets. Those are explicitly out of scope.
 
