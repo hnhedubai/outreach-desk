@@ -15,7 +15,9 @@ users.
 
 Outreach Desk is a **single-workspace, single-user, local application**. It:
 
-- Binds only to the loopback interface (`127.0.0.1`) — never to a network address.
+- Binds to the loopback interface (`127.0.0.1`) by default. The only exception is the
+  opt-in `OUTREACH_MODE=server` described in §1.1; with the flag unset nothing can
+  make the app listen on a network address.
 - Stores all data in a local SQLite file under the data directory
   (`OUTREACH_DATA_DIR`, default `./data`).
 - Has **zero runtime dependencies** (Node built-ins only; Node >= 24).
@@ -26,6 +28,35 @@ The security goal is therefore **defense of a trusted local tool**: protect the 
 credential, keep state on the machine, and prevent a malicious web page or another
 origin from driving the app or reading its data. It is **not** a hardened multi-tenant
 internet service, and controls are proportionate to that.
+
+### 1.1 `OUTREACH_MODE=server` — opt-in, and not yet sufficient for public exposure
+
+Setting `OUTREACH_MODE=server` relaxes the three guards that make the app unreachable
+from behind a hosting proxy:
+
+| Guard | Default (local) | Server mode |
+|---|---|---|
+| Bind address | `127.0.0.1` | `0.0.0.0` |
+| `Host` validation | must equal `127.0.0.1:port` / `localhost:port` | must appear in `OUTREACH_ALLOWED_HOSTS` |
+| CSRF `Origin` scheme | always `http://` | taken from `X-Forwarded-Proto`, defaulting to `https://` |
+
+Startup **fails closed**: server mode without a non-empty `OUTREACH_ALLOWED_HOSTS`
+throws and the process exits, so a misconfigured deploy cannot silently accept any
+`Host`.
+
+Two assumptions this mode makes, which the deploy must satisfy:
+
+1. A trusted proxy terminates TLS and **overwrites** `X-Forwarded-Proto`. If clients
+   can reach the instance directly, that header is attacker-controlled and the origin
+   check can be downgraded to `http://`.
+2. The host allow-list is the complete set of public names for the deployment.
+
+**Server mode does not make the app safe to share.** It deliberately leaves the
+remaining single-user assumptions intact: sessions live in an in-memory `Map`
+(`auth.mjs`), so every restart logs users out and multiple instances cannot share
+them; there is exactly one hardcoded username (`admin`, `auth.mjs:5`); and the session
+cookie carries no `Secure` flag. Those are open work items, not oversights — until
+they are addressed the app should not be exposed beyond a private network.
 
 ### Threat model — what we defend against
 
