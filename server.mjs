@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {readFile,mkdir} from 'node:fs/promises';
 import {join,dirname,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {DatabaseSync} from 'node:sqlite';
+import {openStore} from './db.mjs';
 import {createState,perform,cleanDomain,runDaily,reconcileAssignments,recordJevFit} from './model.mjs';
 import {currentJevFit,jevAvailable,jevInput,scoreWithJev} from './jev.mjs';
 import {firecrawlAvailable,firecrawlSearch} from './firecrawl.mjs';
@@ -25,15 +25,12 @@ const root=dirname(fileURLToPath(import.meta.url));
 const port=Number(requestedPort??process.env.PORT??8282);
 const dataDir=providedDataDir||process.env.OUTREACH_DATA_DIR||join(root,'data');
 await mkdir(dataDir,{recursive:true});
-const ownsDb=!providedDb;
-const db=providedDb||new DatabaseSync(join(dataDir,'outreach.sqlite'));
+const store=await openStore({providedDb,dataDir});
 const auth=await ensureAuth(dataDir);
-db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS workspace_state(id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL, document TEXT NOT NULL)');
-const get=db.prepare('SELECT revision,document FROM workspace_state WHERE id=1');
-if(!get.get())db.prepare('INSERT OR IGNORE INTO workspace_state VALUES (1,0,?)').run(JSON.stringify(createState()));
-const update=db.prepare('UPDATE workspace_state SET revision=?,document=? WHERE id=1 AND revision=?');
-const read=()=>{
- const row=get.get();
+await store.seed(JSON.stringify(createState()));
+const read=async()=>{
+ const row=await store.getState();
+ if(!row)throw requestError(500,'Saved workspace data is unreadable. Restore it from a backup.');
  try{return {...JSON.parse(row.document),revision:row.revision};}
  catch{throw requestError(500,'Saved workspace data is unreadable. Restore it from a backup.');}
 };
@@ -42,15 +39,15 @@ const encodeState=state=>{
  try{return JSON.stringify(state);}
  catch{throw requestError(507,'The workspace is too large to save. Reduce its size and try again.');}
 };
-const maintain=()=>{
- const state=read();
+const maintain=async()=>{
+ const state=await read();
  const reconciled=reconcileAssignments(state);
  const generated=runDaily(state);
  if(!reconciled&&!generated)return state;
  const previous=state.revision;state.revision++;
- return update.run(state.revision,encodeState(state),previous).changes===1?state:read();
+ return await store.save(state.revision,encodeState(state),previous)?state:await read();
 };
-const load=()=>maintain();
+const load=async()=>maintain();
 const send=(res,status,data,type='application/json; charset=utf-8')=>{
  if(res.destroyed||res.writableEnded||res.headersSent)return;
  let payload=data;
@@ -110,8 +107,8 @@ async function scoreLead(input,revision){
     Object.keys(input).some(key=>!['workspace','project','lead'].includes(key))){
   throw requestError(400,'Jev accepts exactly one lead per request: workspace, project and lead.');
  }
- const state=read();
- if(revision!==state.revision)throw requestError(409,'The workspace changed. Refresh and try again.');
+ const state=await read();
+  if(revision!==state.revision)throw requestError(409,'The workspace changed. Refresh and try again.');
  const {workspace,project,lead}=scoringTarget(state,input);
  if(!project.targeting.ideal?.trim())throw requestError(400,'Set the ideal customer in project targeting before scoring.');
  if(!lead.description?.trim()&&!lead.fitReview?.assets?.length)throw requestError(400,'Add a company brief or fit evidence before scoring.');
@@ -123,13 +120,13 @@ async function scoreLead(input,revision){
  scoring.add(key);
  try{
   const fit=await scoreWithJev(request);
-  const latest=read(),target=scoringTarget(latest,input);
+  const latest=await read(),target=scoringTarget(latest,input);
   if(jevInput(target.project,target.lead).basis!==fit.basis){
    throw requestError(409,'Targeting or lead evidence changed during scoring. Review and try again.');
   }
   recordJevFit(target.workspace,target.project,target.lead,fit);
    const previous=latest.revision++;
-   if(update.run(latest.revision,encodeState(latest),previous).changes!==1){
+   if(!(await store.save(latest.revision,encodeState(latest),previous))){
     throw requestError(409,'The workspace changed during scoring. Refresh and try again.');
    }
   return stateResponse(latest,{score:fit.score});
@@ -237,10 +234,10 @@ const server=createServer(async(req,res)=>{
    res.setHeader('Set-Cookie','outreach_session='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800');
    send(res,200,{ok:true});return;
   }
-  if(u.pathname==='/api/state'&&req.method==='GET'){send(res,200,stateResponse(load()));return;}
+  if(u.pathname==='/api/state'&&req.method==='GET'){send(res,200,stateResponse(await load()));return;}
   if(u.pathname==='/api/import-preview'){
     requirePost(req);
-    const input=await body(req,10_000_000),state=read();
+    const input=await body(req,10_000_000),state=await read();
     const result=perform(state,'import-preview',input);
     send(res,200,{result,revision:state.revision});return;
   }
@@ -248,7 +245,7 @@ const server=createServer(async(req,res)=>{
     requirePost(req);
     const input=await body(req,10_000_000);
     if(input.type==='jev-score'){send(res,200,await scoreLead(input.input,input.revision));return;}
-    const state=load();
+    const state=await load();
     if(input.type==='import'&&input.input?.batchId){
       const {workspace,project,batchId}=input.input;
       if(typeof batchId!=='string'||!/^[\da-f-]{36}$/i.test(batchId))throw Object.assign(new Error('Invalid import batch ID.'),{status:400});
@@ -264,21 +261,21 @@ const server=createServer(async(req,res)=>{
     const result=perform(state,input.type,input.input);
     reconcileAssignments(state);
     const previous=state.revision;state.revision++;
-    if(update.run(state.revision,encodeState(state),previous).changes!==1){send(res,409,{error:'The workspace changed. Refresh and try again.'});return;}
+    if(!(await store.save(state.revision,encodeState(state),previous))){send(res,409,{error:'The workspace changed. Refresh and try again.'});return;}
     send(res,200,stateResponse(state,result));return;
   }
   if(u.pathname==='/api/search'){
     requirePost(req);
     const input=await body(req);
-    send(res,200,{rows:await search(input,['firecrawl','perplexity'].includes(input.source)?read():load())});return;
+    send(res,200,{rows:await search(input,['firecrawl','perplexity'].includes(input.source)?await read():await load())});return;
   }
   if(u.pathname==='/api/contact-email'){
     requirePost(req);
     const input=await body(req);
-    send(res,200,await lookupContactEmail(read(),input));return;
+    send(res,200,await lookupContactEmail(await read(),input));return;
   }
   if(u.pathname==='/api/audit'&&req.method==='GET'){
-    const ws=load().workspaces.find(w=>w.id===u.searchParams.get('workspace'));if(!ws){send(res,404,{error:'Workspace unavailable.'});return;}
+    const ws=(await load()).workspaces.find(w=>w.id===u.searchParams.get('workspace'));if(!ws){send(res,404,{error:'Workspace unavailable.'});return;}
     const format=u.searchParams.get('format')==='jsonl'?'jsonl':'csv';
     res.setHeader('Content-Disposition','attachment; filename="outreach-audit.'+format+'"');
     send(res,200,exportAudit(ws,u.searchParams.get('project'),u.searchParams.get('from'),u.searchParams.get('to'),format),'text/plain; charset=utf-8');return;
@@ -293,7 +290,7 @@ const server=createServer(async(req,res)=>{
 server.requestTimeout=120_000;
 server.headersTimeout=60_000;
 server.keepAliveTimeout=5_000;
-const dailyInterval=setInterval(()=>{try{maintain();}catch(error){console.error('Daily worklist:',error.message);}},300_000);
+const dailyInterval=setInterval(()=>{maintain().catch(error=>console.error('Daily worklist:',error.message));},300_000);
 dailyInterval.unref();
 return {
  server,
@@ -306,7 +303,7 @@ return {
   server.listen(port,'127.0.0.1',()=>console.log('Outreach Desk · http://localhost:'+server.address().port+'/'));
  }),
  close:()=>new Promise(resolveClose=>{
-  const finish=()=>{clearInterval(dailyInterval);if(ownsDb)db.close();resolveClose();};
+  const finish=()=>{clearInterval(dailyInterval);Promise.resolve(store.close()).then(()=>resolveClose(),()=>resolveClose());};
   if(server.listening)server.close(finish);else finish();
  })
 };
