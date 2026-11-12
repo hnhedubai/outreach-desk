@@ -20,7 +20,7 @@ const nav=(name,page,path,active,sub=false)=>'<a class="nav-item '+(active?'acti
 const projectNav=(ws,current)=>ws.projects.map(p=>{
  const expanded=current?.id===p.id;
  const num=todayRows(ws,p).filter(a=>!worked(a)).length;
-  return '<a class="nav-item'+(expanded?' active':'')+'" href="'+go('today',p.id)+'"><span class="project-icon"><span class="glyph" style="'+glyphStyle(initialOf(p.name))+'">'+e(initialOf(p.name))+'</span></span><span>'+e(p.name)+'</span><span class="nav-badge">'+num+'</span></a>'+
+  return '<a class="nav-item'+(expanded?' active':'')+'" href="'+go('today',p.id)+'"><span class="project-icon"><span class="glyph" style="'+glyphStyle(initialOf(p.name))+'">'+e(initialOf(p.name))+'</span></span><span class="nav-name">'+e(p.name)+'</span><span class="nav-badge">'+num+'</span></a>'+
  (expanded?menus.map(([label,key])=>nav(label,key,go(key,p.id),route().page===key||(key==='leads'&&route().page==='lead'),true)).join(''):'');
 }).join('');
 function shell(r,body){
