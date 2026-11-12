@@ -73,6 +73,13 @@ export const enabledChannels=p=>channels.filter(x=>p.configs[x].enabled);
 export const todayRows=(ws,p)=>p.assignments.filter(a=>a.day===day(ws.timezone));
 export const leadTitle=l=>'<span class="table-name">'+e(l.name)+'</span><small class="subline">'+e(l.domain)+(l.country?' · '+e(l.country):'')+'</small>';
 export const channelTag=(c,active=true)=>'<span class="pill '+(c==='LinkedIn'?'in ':'')+(active?'':'off')+'">'+e(({LinkedIn:'IN',Email:'EM',Instagram:'IG',WhatsApp:'WA',Call:'TEL'})[c]||c)+'</span>';
+export const verifyBadge=(s)=>{
+  const svg=(cls,label,inner)=>'<svg class="vstat '+cls+'" viewBox="0 0 12 12" role="img" aria-label="'+e(label)+'" title="'+e(label)+'">'+inner+'</svg>';
+  if(s==='safe') return svg('vstat-ok','Verified · safe to send','<path d="M2.5 6.4 4.9 8.8 9.6 3.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>');
+  if(s==='catch_all') return svg('vstat-ca','Catch-all · send with caution','<circle cx="6" cy="6" r="3.4" fill="currentColor"/>');
+  if(['invalid','disabled','spamtrap','disposable','inbox_full','role_account'].includes(s)) return svg('vstat-bad','Invalid','<circle cx="6" cy="6" r="4.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M3.1 8.9 8.9 3.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>');
+  return svg('vstat-none','Not verified','<circle cx="6" cy="6" r="3.2" fill="none" stroke="currentColor" stroke-width="1.3"/>');
+};
 export const note=(text)=>'<p class="notice small">'+e(text)+'</p>';
 
 

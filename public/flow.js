@@ -1,5 +1,5 @@
 import {contactAllowed} from './eligibility.js';
-import {outreachLink,e,go,link,btn,icon,header,card,empty,table,tr,blankRow,form,field,area,check,select,tabs,note,date,day,ext,attr,segment,handles,handleLabel,channels,leadChannels,marks,lifecycles,rowLink,leadState,jevFitScore,jevChip} from './ui.js';
+import {outreachLink,e,go,link,btn,icon,header,card,empty,table,tr,blankRow,form,field,area,check,select,tabs,note,date,day,ext,attr,segment,handles,handleLabel,channels,leadChannels,marks,lifecycles,rowLink,leadState,jevFitScore,jevChip,verifyBadge} from './ui.js';
 
 export const leadFields=(l={})=>'<div class="field-row">'+field('Company name','name',l.name,{required:true})+field('Company domain','domain',l.domain,{required:true,placeholder:'example.com'})+
  field('City','city',l.city)+field('Country / region','country',l.country)+field('Category','category',l.category)+
@@ -50,7 +50,7 @@ export function leadPage(ws,p,l,tab,ui,{jevAvailable,firecrawlAvailable,perplexi
  }
  if(tab==='people'){
   const roles=p.targeting.roles.map(x=>x.toLowerCase());
-  const rows=l.contacts.map(c=>tr(['<strong>'+e(c.name)+'</strong>','<span title="'+e(c.title||'')+'">'+e(c.designation||c.title||'—')+'</span>',c.email?outreachLink(ws,p,l,'Email',c.email,c.email)+(c.emailSource?'<small class="subline">'+e(c.emailSource)+' · deliverability unverified</small>':''):'—',c.linkedin?(contactAllowed(ws,p,l,'LinkedIn',c.linkedin)?'<a class="accent" href="'+e(c.linkedin)+'" target="_blank" rel="noopener noreferrer" title="Open LinkedIn profile" aria-label="Open LinkedIn profile">'+icon('linkedin')+'</a>':icon('linkedin')+' <span class="pill off">Unavailable for outreach</span>'):'—',c.source?ext(c.source,'Source'):'—',
+  const rows=l.contacts.map(c=>tr(['<strong>'+e(c.name)+'</strong>','<span title="'+e(c.title||'')+'">'+e(c.designation||c.title||'—')+'</span>',c.email?verifyBadge(c.email_verified)+outreachLink(ws,p,l,'Email',c.email,c.email):'—',c.linkedin?(contactAllowed(ws,p,l,'LinkedIn',c.linkedin)?'<a class="accent" href="'+e(c.linkedin)+'" target="_blank" rel="noopener noreferrer" title="Open LinkedIn profile" aria-label="Open LinkedIn profile">'+icon('linkedin')+'</a>':icon('linkedin')+' <span class="pill off">Unavailable for outreach</span>'):'—',c.source?ext(c.source,'Source'):'—',
     roles.some(r=>((c.designation||'')+' '+(c.title||'')).toLowerCase().includes(r))?'<span class="pill green">Target role</span>':'',
     btn('Edit','dialog','subtle',{'data-kind':'contact-edit','data-id':c.id})+
     (limaAvailable&&!l.erasedAt&&!c.email?btn('Find work email','lima-email','subtle',{'data-id':c.id,title:'LimaData lookup · up to 1 credit'}):'')]));
