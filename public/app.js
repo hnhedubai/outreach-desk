@@ -16,7 +16,7 @@ function route(){
 }
 const person=ws=>ws.members[0];
 const labelOf=r=>r.page==='lead'?r.lead?.name||'Lead':labels[r.page]||({home:'Home',team:'Team',dnc:'Do-not-contact',settings:'Settings',usage:'Usage & limits',audit:'Audit export',apps:'Apps',new:'New project',account:'Account settings',agent:'Agent mode'})[r.page]||'Home';
-const nav=(name,page,path,active,sub=false)=>'<a class="nav-item '+(active?'active ':'')+(sub?'sub':'')+'" href="'+e(path)+'">'+(sub?'':icon(page))+e(name)+'</a>';
+const nav=(name,page,path,active,sub=false)=>'<a class="nav-item '+(active?'active ':'')+(sub?'sub':'')+'" href="'+e(path)+'">'+(sub?'':icon(page))+'<span class="nav-name">'+e(name)+'</span></a>';
 const projectNav=(ws,current)=>ws.projects.map(p=>{
  const expanded=current?.id===p.id;
  const num=todayRows(ws,p).filter(a=>!worked(a)).length;
@@ -30,7 +30,7 @@ function shell(r,body){
  btn('Change password','dialog','',{'data-kind':'password-change'})+btn('Cookie settings','dialog','',{'data-kind':'cookie'})+btn('Sign out','logout','subtle')+'</div>':'';
  const wsItems=[['Home','home'],['Team','team'],['Do-not-contact','dnc'],['Settings','settings'],['Apps','apps']];
  const actions=p&&page!=='agent'?'<button type="button" class="btn notify" data-action="enrichment-menu"><span class="enriched-check" aria-hidden="true">✓</span>Enriched <span>'+p.enrichments.length+'</span></button><a class="btn primary agent-entry" href="'+go('agent',p.id)+'">Agent mode <span class="agent-count">'+n+' mine</span></a>':'';
- return '<div class="shell"><div class="brand-head"><button type="button" class="brand" data-action="menu" data-value="workspace" aria-expanded="'+(menu==='workspace')+'"><span class="logo"><img class="logo-img" src="/icon-192.png" alt="" width="28" height="28"></span>'+e(ws.name)+icon('down')+'</button>'+workspaceMenu+'</div>'+
+ return '<div class="shell"><div class="brand-head"><button type="button" class="brand" data-action="menu" data-value="workspace" aria-expanded="'+(menu==='workspace')+'"><span class="logo"><img class="logo-img" src="/icon-192.png" alt="" width="28" height="28"></span>'+'<span class="brand-name">'+e(ws.name)+'</span>'+icon('down')+'</button>'+workspaceMenu+'</div>'+
  '<header class="topbar"><div class="crumb">'+btn('☰','mobile-menu','subtle',{id:'menu-toggle','aria-label':'Open navigation'})+
  link(ws.name,go('home'),'')+' <span>/</span> '+(p?link(p.name,go('overview',p.id),'')+' <span>/</span> ':'')+e(labelOf(r))+'</div><div class="head-actions">'+actions+'</div></header>'+
  '<aside class="sidebar '+(ui.mobile?'open':'')+'"><nav class="nav-scroll" aria-label="Main navigation">'+wsItems.map(([name,key])=>nav(name,key,go(key),!p&&(page===key||(key==='settings'&&['usage','audit'].includes(page))))).join('')+
