@@ -321,8 +321,6 @@ dialog.wizard .btn.primary:hover{background:var(--accent-dark)}
 .wizard-track i{height:4px;border-radius:2px;background:#e5e0d8;flex:1}
 .wizard-track i.on{background:var(--accent)}
 .wizard-progress span{font-size:12px;font-weight:650;color:var(--muted);white-space:nowrap}
-.wizard-back{align-self:flex-start;background:none;border:0;padding:0;margin-bottom:10px;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer}
-.wizard-back:hover{color:var(--accent)}
 .wizard-right h2{font-size:22px;line-height:1.2;letter-spacing:-.02em}
 .wizard-sub{margin-top:6px;color:var(--muted);line-height:1.5;font-size:14px}
 .wizard-right .form{margin-top:22px}
@@ -348,9 +346,10 @@ dialog.wizard .btn.primary:hover{background:var(--accent-dark)}
 .wizard-actions .btn.ghost{background:none;border:0;min-height:auto;padding:8px;color:var(--muted);font-weight:600;font-size:13px;align-self:center}
 .wizard-actions .btn.ghost:hover{color:var(--text)}
 .wizard-success{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;margin:auto 0;padding:24px 0}
-.wizard-success-icon{width:56px;height:56px;border-radius:14px;background:#e7f5ee;color:#4caf87;display:flex;align-items:center;justify-content:center}
+.wizard-success-icon{width:56px;height:56px;border-radius:14px;background:#e7f5ee;color:#167850;display:flex;align-items:center;justify-content:center}
 .wizard-success-icon .icon{width:28px;height:28px}
 .wizard-success h2{font-size:22px;line-height:1.2;letter-spacing:-.02em}
 .wizard-success .wizard-sub{max-width:360px}
 .wizard-success .btn{margin-top:6px}
+.wizard-success .btn.primary{width:100%;justify-content:center}
 @media(max-width:720px){dialog.wizard{width:calc(100vw - 16px)}.wizard-body{grid-template-columns:1fr;min-height:0}.wizard-left{display:none}.wizard-right{padding:22px}}

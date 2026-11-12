@@ -244,8 +244,7 @@ function workspaceWizardHtml(){
     }else if(step===2){
      const invites=(w.invites&&w.invites.length)?w.invites:[{email:'',role:'Agent'}];
      const rows=invites.map((m,i)=>'<div class="wizard-invite-row"><label>Email<input name="inviteEmail" type="email" value="'+e(m.email)+'" placeholder="teammate@company.com" autocomplete="off"></label><label>Role'+select('inviteRole',['Agent','Admin'],m.role||'Agent')+'</label>'+(invites.length>1?'<button type="button" class="row-remove" data-action="ws-invite-remove" data-index="'+i+'" aria-label="Remove invitation">&times;</button>':'<span class="row-remove-spacer"></span>')+'</div>').join('');
-     right='<button type="button" class="wizard-back" data-action="ws-step-back">← Back</button>'+
-      '<h2>Invite your team</h2><p class="wizard-sub">Invite the people who will work '+e(w.name||'this workspace')+'. Admins can also manage projects, channels and settings. You can do this later too.</p>'+
+     right='<h2>Invite your team</h2><p class="wizard-sub">Invite the people who will work '+e(w.name||'this workspace')+'. Admins can also manage projects, channels and settings. You can do this later too.</p>'+
       '<div class="wizard-invite-rows">'+rows+'</div>'+
       '<button type="button" class="add-another" data-action="ws-invite-another">+ Add another</button>'+
       '<form class="form" data-form="workspace-add-step2"><div class="wizard-actions"><button type="submit" class="btn primary">Finish</button><button type="button" class="btn ghost" data-action="ws-skip">Skip for now</button></div></form>';
@@ -376,7 +375,6 @@ async function onClick(event){
   if(type==='workspace-select'){await action(type,{workspace:d.id},{after:()=>{menu='';location.hash=go('home');}});return;}
    if(type==='ws-invite-another'){const w=ui.wsWizard||{};w.invites=collectInviteRows();w.invites.push({email:'',role:'Agent'});openDialog('workspace-add');return;}
    if(type==='ws-invite-remove'){const w=ui.wsWizard||{};w.invites=collectInviteRows();w.invites.splice(Number(d.index),1);if(!w.invites.length)w.invites=[{email:'',role:'Agent'}];openDialog('workspace-add');return;}
-   if(type==='ws-step-back'){if(ui.wsWizard)ui.wsWizard.step=1;openDialog('workspace-add');return;}
    if(type==='ws-skip'){await createWorkspaceFromWizard([]);return;}
  if(type==='worklist'){await action(type,{replace:d.replace==='true'},{message:d.replace==='true'?'Worklist regenerated.':'Worklist topped up.'});return;}
  if(type==='mark'||type==='lead-mark'){await action(type,{assignment:d.id,channel:d.channel,mark:d.mark},{message:d.mark+' recorded.'});return;}
