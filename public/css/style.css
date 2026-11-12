@@ -294,3 +294,50 @@ fieldset{border:0;padding:0;margin:0;min-width:0}
 .auth-help{margin:22px 0 0;color:var(--muted);font-size:12px;line-height:18px}
 .auth-help strong{color:var(--text)}
 @media(max-width:520px){.auth-card{padding:28px 22px}}
+
+/* Add-workspace 3-step wizard — split-screen dialog mirroring the reference onboarding. Scoped to dialog.wizard. */
+dialog.wizard{width:min(1000px,calc(100vw - 32px));padding:0;border-radius:16px;overflow:hidden;max-height:calc(100vh - 48px)}
+dialog.wizard::backdrop{background:#29201855}
+.wizard-body{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);min-height:520px}
+.wizard-left{background:#241f1a;color:#f5efe6;padding:32px 30px;display:flex;flex-direction:column;gap:16px}
+.wizard-brand{display:flex;align-items:center;gap:10px;font-family:"Space Grotesk",Inter,sans-serif;font-weight:700;font-size:16px}
+.wizard-brand .logo{color:#fff}
+.wizard-left h2{font-size:24px;line-height:1.2;letter-spacing:-.02em;color:#fff}
+.wizard-left p{color:#c9c2b8;line-height:1.55;font-size:14px}
+.wizard-bullets{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:11px}
+.wizard-bullets li{display:flex;align-items:flex-start;gap:9px;font-size:13.5px;line-height:1.45;color:#e9e2d8}
+.wizard-bullets .icon{color:#4caf87;flex-shrink:0;margin-top:2px;width:15px;height:15px}
+.wizard-foot{margin-top:auto;font-size:12px;color:#8a8378}
+.wizard-right{padding:30px 34px;display:flex;flex-direction:column;overflow:auto}
+.wizard-progress{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.wizard-track{display:flex;gap:5px;flex:1;max-width:220px}
+.wizard-track i{height:4px;border-radius:2px;background:var(--line);flex:1}
+.wizard-track i.on{background:var(--accent)}
+.wizard-progress span{font-size:12px;font-weight:650;color:var(--muted);white-space:nowrap}
+.wizard-right h2{font-size:22px;line-height:1.2;letter-spacing:-.02em}
+.wizard-sub{margin-top:6px;color:var(--muted);line-height:1.5;font-size:14px}
+.wizard-right .form{margin-top:22px}
+.url-field{display:flex;align-items:stretch;border:1px solid var(--line);border-radius:8px;background:var(--paper);overflow:hidden}
+.url-field:focus-within{border-color:var(--accent)}
+.url-prefix{display:flex;align-items:center;padding:0 10px;background:var(--header);color:var(--muted);font-size:13px;white-space:nowrap;border-right:1px solid var(--line)}
+.url-field input{border:0;border-radius:0;background:transparent;min-height:34px;flex:1;min-width:0}
+.url-field input:focus{outline:none}
+.url-status{font-size:12.5px;line-height:1.45;margin:-4px 0 0}
+.url-status.ok{color:var(--green)}
+.url-status.bad{color:#b42318}
+.url-status.muted{color:var(--muted)}
+.wizard-invite-rows{display:grid;gap:12px;margin-top:22px}
+.wizard-invite-row{display:grid;grid-template-columns:minmax(0,1fr) 130px 32px;gap:10px;align-items:end}
+.wizard-invite-row label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:600;color:var(--muted)}
+.wizard-invite-row .row-remove{align-self:end;height:34px;width:32px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--muted);font-size:18px;line-height:1;cursor:pointer;padding:0}
+.wizard-invite-row .row-remove:hover{border-color:#b42318;color:#b42318}
+.wizard-invite-row .row-remove-spacer{height:34px}
+.add-another{align-self:flex-start;margin-top:14px;background:none;border:0;padding:0;color:var(--accent);font-size:13.5px;font-weight:650;cursor:pointer}
+.add-another:hover{text-decoration:underline}
+.wizard-success{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;margin:auto 0;padding:24px 0}
+.wizard-success-icon{width:56px;height:56px;border-radius:14px;background:#e7f5ee;color:#4caf87;display:flex;align-items:center;justify-content:center}
+.wizard-success-icon .icon{width:28px;height:28px}
+.wizard-success h2{font-size:22px;line-height:1.2;letter-spacing:-.02em}
+.wizard-success .wizard-sub{max-width:360px}
+.wizard-success .btn{margin-top:6px}
+@media(max-width:720px){dialog.wizard{width:calc(100vw - 16px)}.wizard-body{grid-template-columns:1fr;min-height:0}.wizard-left{display:none}.wizard-right{padding:22px}}

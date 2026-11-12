@@ -133,6 +133,15 @@ async function action(type,input={},options={}){
 }
 function openDialog(kind,info={}){
  const r=route(),l=r.lead,p=r.p;
+ if(kind==='workspace-add'){
+  const fresh=()=>({step:1,name:'',slug:'',slugEdited:false,invites:[]});
+  if(!dialog.open)ui.wsWizard=fresh();
+  else if(!ui.wsWizard)ui.wsWizard=fresh();
+  dialog.className='wizard';
+  dialog.innerHTML=workspaceWizardHtml();
+  if(!dialog.open)dialog.showModal();
+  return;
+ }
  let title='',content='';
  if(kind==='lead-add'||kind==='lead-edit'){title=kind==='lead-add'?'Add lead':'Edit lead details';content=form(kind,leadFields(kind==='lead-edit'?l:{}),kind==='lead-add'?'Add lead':'Save changes');}
  if(kind==='contact-add'||kind==='contact-edit'){
@@ -142,7 +151,7 @@ function openDialog(kind,info={}){
  if(kind==='project-limit'){title='Project lead limit';content=form(kind,field('Lead limit','limit',p.maxLeads,{type:'number',min:Math.max(1,p.leads.length),max:1000,required:true}));}
  if(kind==='channel-edit'){title='Edit '+info.channel+' handle';content=form(kind,hidden('channel',info.channel)+field('Handle','value',l.channels[info.channel]||''));}
  if(kind==='suppress'){title='Add do-not-contact entry';content=form(kind,'<label>Type'+select('kind',['Email','Domain','Phone','LinkedIn','Instagram'],'Email')+'</label>'+field('Address, domain or handle','value','',{required:true})+'<label>Reason'+select('reason',['Added by admin','Opt-out','Bounce','Erasure request'],'Added by admin')+'</label>','Add entry');}
- if(kind==='workspace-add'){title='Add workspace';content=form(kind,field('Workspace name','name','',{required:true}),'Create workspace');}
+  if(kind==='workspace-add'){/* handled by the 2-step wizard in workspaceWizardHtml() */}
  if(kind==='cookie'){title='Cookie settings';content='<p>Outreach Desk stores workspace and preference data on this computer.</p><div class="flex row-gap">'+btn('Necessary only','cookie','',{'data-value':'necessary'})+btn('Accept','cookie','primary',{'data-value':'accepted'})+'</div>';}
  if(kind==='password-change'){title='Change password';content=form(kind,field('Current password','currentPassword','',{type:'password',autocomplete:'current-password',required:true})+field('New password','newPassword','',{type:'password',autocomplete:'new-password',minlength:10,required:true})+field('Confirm new password','confirmPassword','',{type:'password',autocomplete:'new-password',minlength:10,required:true})+'<p class="small muted">Use at least 10 characters.</p>','Change password');}
  if(kind==='erase'){title='Erase personal data';content='<p>Clear contacts, outreach handles, notes, drafts, the brief and enrichment findings from '+e(l.name)+'. The company remains on the list. Suppress the removed handles to prevent future outreach.</p>'+form('erase',field('Type ERASE to confirm','confirm','',{required:true,pattern:'ERASE'}),'Erase personal data');}
@@ -164,9 +173,85 @@ function openDialog(kind,info={}){
   title='Recent enrichment';
   content=(p.enrichments.slice(0,6).map(x=>'<div class="activity"><b>'+e(x.domain)+'</b> '+link('View details',go('lead',p.id,x.leadId,'enrichment'),'btn link')+'</div>').join('')||empty('No enrichments recorded.'))+link('Import and enrichment',go('import',p.id),'btn link');
  }
- if(!title)return;
- dialog.innerHTML='<div class="dialog-head"><h2>'+e(title)+'</h2>'+btn('Close','close-dialog','subtle')+'</div>'+content;
+  if(!title)return;
+  dialog.className='';
+  dialog.innerHTML='<div class="dialog-head"><h2>'+e(title)+'</h2>'+btn('Close','close-dialog','subtle')+'</div>'+content;
  if(!dialog.open)dialog.showModal();
+}
+const slugify=value=>String(value||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+function wsSlugInfo(slug){
+ const key=String(slug||'').toLowerCase().trim();
+ if(!key)return {key,state:'empty'};
+ if(!/^[a-z0-9-]+$/.test(key))return {key,state:'invalid'};
+ if(state.workspaces.some(x=>x.id===key))return {key,state:'taken'};
+ return {key,state:'available'};
+}
+function wsSlugMessage(host,info){
+ if(info.state==='available')return {text:host+'/'+info.key+' is available.',cls:'ok'};
+ if(info.state==='taken')return {text:host+'/'+info.key+' is already taken.',cls:'bad'};
+ if(info.state==='invalid')return {text:'Use only letters, numbers and dashes.',cls:'bad'};
+ return {text:'Letters, numbers and dashes. Leave blank to build it from the name.',cls:'muted'};
+}
+function updateWizardSlug(){
+ const form=dialog.querySelector('form[data-form="workspace-add-step1"]');if(!form)return;
+ const w=ui.wsWizard||{},info=wsSlugInfo(w.slug),msg=wsSlugMessage(location.host||'localhost',info);
+ const status=form.querySelector('[data-slug-status]');
+ if(status){status.textContent=msg.text;status.className='url-status '+msg.cls;}
+ const cont=form.querySelector('button[type=submit]');
+ if(cont)cont.disabled=info.state==='taken'||info.state==='invalid';
+}
+function onDialogInput(event){
+ const x=event.target,form=x.closest?.('form[data-form="workspace-add-step1"]');if(!form)return;
+ const w=ui.wsWizard;if(!w)return;
+ if(x.name==='name'){
+  w.name=x.value;
+  if(!w.slugEdited){w.slug=slugify(x.value);const s=form.querySelector('[name=slug]');if(s)s.value=w.slug;}
+ }else if(x.name==='slug'){w.slugEdited=true;w.slug=x.value.toLowerCase();}
+ else return;
+ updateWizardSlug();
+}
+function collectInviteRows(){
+ return [...dialog.querySelectorAll('.wizard-invite-row')].map(row=>({email:(row.querySelector('[name=inviteEmail]')?.value||'').trim().toLowerCase(),role:row.querySelector('[name=inviteRole]')?.value==='Admin'?'Admin':'Agent'}));
+}
+function cleanInvites(rows){
+ const seen=new Set(),out=[];
+ for(const r of rows||[]){const email=r.email;if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||seen.has(email))continue;seen.add(email);out.push({email,role:r.role});}
+ return out;
+}
+async function createWorkspaceFromWizard(rows){
+ const w=ui.wsWizard||{};
+ await action('workspace-add',{name:w.name,slug:w.slug,invites:cleanInvites(rows||[])},{message:false,after:()=>{ui.wsWizard={step:3,name:w.name,slug:w.slug};openDialog('workspace-add');}});
+}
+function workspaceWizardHtml(){
+ const w=ui.wsWizard,step=w.step||1;
+ const host=(location.host||'localhost')+'/';
+ const bullets=['Group projects, leads and outreach in one place','Invite teammates as Agents or Admins','Time zone sets when daily worklists build','API keys and limits stay inside the workspace'];
+ const left='<div class="wizard-left"><div class="wizard-brand"><span class="logo">'+icon('logo')+'</span><span>Outreach Desk</span></div>'+
+  '<h2>Set up a new workspace</h2><p>A workspace holds your projects, people, leads and research. Name it after your company or team, then invite the people who will work the lists.</p>'+
+  '<ul class="wizard-bullets">'+bullets.map(b=>'<li>'+icon('check')+'<span>'+e(b)+'</span></li>').join('')+'</ul>'+
+  '<div class="wizard-foot">© 2026 Outreach Desk</div></div>';
+  const track='<div class="wizard-track"><i class="on"></i><i class="'+(step>=2?'on':'')+'"></i><i class="'+(step>=3?'on':'')+'"></i></div>';
+  const progress=step<3?'<div class="wizard-progress">'+track+'<span>Step '+step+' of 3</span></div>':'';
+  let right='';
+  if(step===1){
+   const info=wsSlugInfo(w.slug),msg=wsSlugMessage(location.host||'localhost',info);
+   right='<h2>Name your workspace</h2><p class="wizard-sub">Usually your company or team. Projects, people and settings live here.</p>'+
+    '<form class="form" data-form="workspace-add-step1">'+
+    '<label>Workspace name<input name="name" value="'+e(w.name)+'" maxlength="80" required autocomplete="off"></label>'+
+    '<label>URL<div class="url-field"><span class="url-prefix">'+e(host)+'</span><input name="slug" value="'+e(w.slug)+'" placeholder="acme" maxlength="80" autocomplete="off" spellcheck="false" aria-label="Workspace URL"></div></label>'+
+    '<p class="url-status '+msg.cls+'" data-slug-status>'+e(msg.text)+'</p>'+
+    '<div class="actions"><button type="button" class="btn subtle" data-action="close-dialog">Cancel</button><button type="submit" class="btn primary"'+(info.state==='taken'||info.state==='invalid'?' disabled':'')+'>Continue to invite your team →</button></div></form>';
+   }else if(step===2){
+    const invites=(w.invites&&w.invites.length)?w.invites:[{email:'',role:'Agent'}];
+    const rows=invites.map((m,i)=>'<div class="wizard-invite-row"><label>Email<input name="inviteEmail" type="email" value="'+e(m.email)+'" placeholder="teammate@company.com" autocomplete="off"></label><label>Role'+select('inviteRole',['Agent','Admin'],m.role||'Agent')+'</label>'+(invites.length>1?'<button type="button" class="row-remove" data-action="ws-invite-remove" data-index="'+i+'" aria-label="Remove invitation">&times;</button>':'<span class="row-remove-spacer"></span>')+'</div>').join('');
+    right='<h2>Invite your team</h2><p class="wizard-sub">Invite the people who will work '+e(w.name||'this workspace')+'. Admins can also manage projects, channels and settings. You can do this later too.</p>'+
+     '<div class="wizard-invite-rows">'+rows+'</div>'+
+     '<button type="button" class="add-another" data-action="ws-invite-another">+ Add another</button>'+
+     '<form class="form" data-form="workspace-add-step2"><div class="actions"><button type="button" class="btn subtle" data-action="ws-step-back">← Back</button><button type="button" class="btn subtle" data-action="ws-skip">Skip for now</button><button type="submit" class="btn primary">Finish</button></div></form>';
+   }else{
+    right='<div class="wizard-success"><div class="wizard-success-icon">'+icon('check')+'</div><h2>'+e(w.name||'Your workspace')+' is ready</h2><p class="wizard-sub">Next, set up your first project. We’ll start by reading your website.</p>'+link('Create your first project →',go('new'),'btn primary')+'</div>';
+   }
+ return '<div class="wizard-body">'+left+'<div class="wizard-right">'+progress+right+'</div></div>';
 }
 const hidden=(name,value)=>'<input type="hidden" name="'+e(name)+'" value="'+e(value)+'">';
 const values=form=>Object.fromEntries(new FormData(form));
@@ -256,7 +341,8 @@ async function searchCompanies(input){
  try{return (await request('/api/search',input)).rows;}catch(error){notify(error.message,true);return null;}finally{busy=false;}
 }
 app.addEventListener('click',onClick);
-dialog.addEventListener('click',onClick);
+ dialog.addEventListener('click',onClick);
+ dialog.addEventListener('input',onDialogInput);
 async function onClick(event){
  try{
  const a=event.target.closest('a[href^="#/"]');
@@ -286,7 +372,11 @@ async function onClick(event){
  if(views[type]){ui[views[type]]=d.value;if(type.startsWith('today-'))ui.todayPage=0;if(type==='agent-channel')ui.agentId='';render();return;}
  if(type==='page'){ui[d.kind+'Page']=Math.max(0,Number(d.value)||0);render();return;}
  if(type==='cookie'){await action('cookie',{value:d.value});return;}
- if(type==='workspace-select'){await action(type,{workspace:d.id},{after:()=>{menu='';location.hash=go('home');}});return;}
+  if(type==='workspace-select'){await action(type,{workspace:d.id},{after:()=>{menu='';location.hash=go('home');}});return;}
+   if(type==='ws-invite-another'){const w=ui.wsWizard||{};w.invites=collectInviteRows();w.invites.push({email:'',role:'Agent'});openDialog('workspace-add');return;}
+   if(type==='ws-invite-remove'){const w=ui.wsWizard||{};w.invites=collectInviteRows();w.invites.splice(Number(d.index),1);if(!w.invites.length)w.invites=[{email:'',role:'Agent'}];openDialog('workspace-add');return;}
+   if(type==='ws-step-back'){if(ui.wsWizard)ui.wsWizard.step=1;openDialog('workspace-add');return;}
+   if(type==='ws-skip'){await createWorkspaceFromWizard([]);return;}
  if(type==='worklist'){await action(type,{replace:d.replace==='true'},{message:d.replace==='true'?'Worklist regenerated.':'Worklist topped up.'});return;}
  if(type==='mark'||type==='lead-mark'){await action(type,{assignment:d.id,channel:d.channel,mark:d.mark},{message:d.mark+' recorded.'});return;}
  if(type==='fit'){await action(type,{value:d.value==='true'});return;}
@@ -451,7 +541,19 @@ async function onSubmit(event){
   const destination=ui.newMode==='find'?'find':'import';
   await action(kind,data,{after:result=>{location.hash=go(destination,result.project);}});return;
  }
- if(kind==='workspace-add'){await action(kind,data,{after:()=>{location.hash=go('home');}});return;}
+  if(kind==='workspace-add-step1'){
+   const name=(data.name||'').trim(),rawSlug=(data.slug||'').trim().toLowerCase();
+   if(!name){notify('Enter a workspace name.',true);return;}
+   if(rawSlug&&!/^[a-z0-9-]+$/.test(rawSlug)){notify('The URL can only contain letters, numbers and dashes.',true);return;}
+   const key=(rawSlug||name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+   if(!key){notify('Enter a workspace name.',true);return;}
+   if(state.workspaces.some(x=>x.id===key)){notify('That workspace already exists.',true);return;}
+    const w=ui.wsWizard||{};w.step=2;w.name=name;w.slug=key;w.invites=(w.invites&&w.invites.length)?w.invites:[{email:'',role:'Agent'}];ui.wsWizard=w;
+    openDialog('workspace-add');return;
+   }
+   if(kind==='workspace-add-step2'){
+    await createWorkspaceFromWizard(collectInviteRows());return;
+   }
  if(kind==='find-step'){const d=findDraft();Object.assign(d,data);d.step++;render();return;}
  if(kind==='find-search'){
   if(busy)return;

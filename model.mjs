@@ -343,9 +343,15 @@ export function perform(state,type,input={}){
   const lead=()=>l||invalid('Select a lead.');
   if(type==='workspace-add'){
     const name=tidy(input.name,80);if(!name)invalid('Enter a workspace name.');
-    const key=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||id();
+    const slug=tidy(String(input.slug||'').toLowerCase(),80).replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,'');
+    const key=slug||name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')||id();
     if(state.workspaces.some(x=>x.id===key))invalid('That workspace already exists.',409);
-    state.workspaces.push({id:key,name,timezone:ws.timezone,members:[structuredClone(ws.members[0])],projects:[],suppressions:[],audit:[],exports:[],cookie:'',searches:0});
+    const members=[structuredClone(ws.members[0])];
+    for(const inv of Array.isArray(input.invites)?input.invites:[]){
+      const email=normalizeEmail(isRecord(inv)?inv.email:inv);if(!email||members.some(m=>m.email===email))continue;
+      members.push({id:id(),name:email.split('@')[0],email,role:isRecord(inv)&&inv.role==='Admin'?'Admin':'Agent',status:'Pending'});
+    }
+    state.workspaces.push({id:key,name,timezone:ws.timezone,members,projects:[],suppressions:[],audit:[],exports:[],cookie:'',searches:0});
     state.active=key;return {workspace:key};
   }
   if(type==='workspace-settings'||type==='account'){
