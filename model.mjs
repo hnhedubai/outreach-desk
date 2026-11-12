@@ -82,7 +82,7 @@ function newLead(input){
   return {id:id(),name:tidy(input.name,140)||domain,domain,country:tidy(input.country,100),category:tidy(input.category,120),
     ...Object.fromEntries(Object.entries(companyProfileLimits).map(([key,limit])=>[key,tidy(input[key],limit)])),
     description:tidy(input.description,8000),website:tidy(input.website,400)||'https://'+domain,lifecycle:'Prospect',ltv:0,segment:'',score:null,
-    manual:false,notFit:false,channels,contacts:list(input.contacts,200).map(newContact).filter(x=>x.name),notes:[],drafts:{},source:tidy(input.source,400),addedAt:now()};
+    manual:false,notFit:false,channels,contacts:list(input.contacts,200).map(newContact).filter(x=>x.name),notes:[],drafts:{},source:tidy(input.source,400),addedAt:now(),domainVerified:'pending',domainCheckedAt:null};
 }
 function makeProject(input,members){
   const name=tidy(input.name,80);

@@ -8,6 +8,7 @@ import {createState,perform,cleanDomain,runDaily,reconcileAssignments,recordJevF
 import {currentJevFit,jevAvailable,jevInput,scoreWithJev} from './jev.mjs';
 import {firecrawlAvailable,firecrawlSearch} from './firecrawl.mjs';
 import {perplexityAvailable,perplexitySearch,limaAvailable,findLimaEmail} from './research-providers.mjs';
+import {verifyDomains} from './domain.mjs';
 import {authUsername,clearSessions,createSession,destroySession,ensureAuth,ensureAdminPassword,initSessions,readAuth,sessionFrom,setPassword,verifyPassword} from './auth.mjs';
 export function classifyStreamError(error,req){
  if(error&&error.status)return {status:error.status,message:error.message};
@@ -54,7 +55,8 @@ const maintain=async()=>{
  const state=await read();
  const reconciled=reconcileAssignments(state);
  const generated=runDaily(state);
- if(!reconciled&&!generated)return state;
+ const verified=await verifyPendingDomains(state,30);
+ if(!reconciled&&!generated&&!verified)return state;
  const previous=state.revision;state.revision++;
  return await store.save(state.revision,encodeState(state),previous)?state:await read();
 };
@@ -195,6 +197,21 @@ async function lookupContactEmail(state,input){
  const result=await findLimaEmail(contact.name,lead.domain);
  return {...result,contact:contact.id,expectedName:contact.name,expectedDomain:lead.domain};
 }
+// Verify domains of leads whose MX status is not yet resolved (newly landed, or a
+// prior error). Mutates state in place; returns true if any lead changed. Bounded so
+// bulk imports stay fast — stragglers finish on the next maintain()/action.
+async function verifyPendingDomains(state,limit=120){
+  const pending=[];
+  for(const ws of state.workspaces||[])for(const p of ws.projects||[])for(const l of p.leads||[]){
+    if(l.domain&&(!l.domainVerified||l.domainVerified==='pending'||l.domainVerified==='error'))pending.push(l);
+  }
+  if(!pending.length)return false;
+  const batch=pending.slice(0,limit);
+  const results=await verifyDomains(batch.map(l=>l.domain));
+  const at=new Date().toISOString();
+  for(const l of batch){const r=results.get(l.domain);if(r){l.domainVerified=r.status;l.domainCheckedAt=at;}}
+  return true;
+}
 const hash=value=>createHash('sha256').update(String(value)).digest('hex');
 function exportAudit(ws,project,from,to,format){
  const rows=ws.audit.filter(e=>(!project||e.project===project)&&(!from||e.at.slice(0,10)>=from)&&(!to||e.at.slice(0,10)<=to)).map(e=>({
@@ -273,6 +290,7 @@ const server=createServer(async(req,res)=>{
     if(input.revision!==state.revision){send(res,409,{error:'The workspace changed. Refresh and try again.'});return;}
     const result=perform(state,input.type,input.input);
     reconcileAssignments(state);
+    await verifyPendingDomains(state);
     const previous=state.revision;state.revision++;
     if(!(await store.save(state.revision,encodeState(state),previous))){send(res,409,{error:'The workspace changed. Refresh and try again.'});return;}
     send(res,200,stateResponse(state,result));return;

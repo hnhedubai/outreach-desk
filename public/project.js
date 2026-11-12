@@ -31,7 +31,7 @@ function today(ws,p,ui){
  const size=Number(ui.todaySize)||10,page=Math.min(Number(ui.todayPage)||0,Math.max(0,Math.ceil(visible.length/size)-1));
  const active=ws.members.filter(m=>m.status==='Active'&&p.agents.includes(m.id));
  const shown=visible.slice(page*size,(page+1)*size).map(({a,l},i)=>tr([
-  e(page*size+i+1),'<span class="channel-cell">'+channelTag(a.channel)+' '+e(a.channel)+'</span>',link(leadTitleText(l),rowLink(l,p),'table-name')+'<small class="subline">'+e(l.domain)+(l.country?' · '+e(l.country):'')+'</small>',
+   e(page*size+i+1),'<span class="channel-cell">'+channelTag(a.channel)+' '+e(a.channel)+'</span>',link(leadTitleText(l),rowLink(l,p),'table-name')+(l.domainVerified==='valid'?'<span class="domain-tick" title="Domain verified — MX mail server live">✓</span>':'')+'<small class="subline">'+e(l.domain)+(l.country?' · '+e(l.country):'')+'</small>',
   dash(jevFitScore(l)),'<div class="handle"><b>'+e(a.person)+'</b><small class="subline">'+e(handleLabel(a.handle))+'</small></div>',
   select('Assignee',[['Shared pool',''],...active.map(x=>[x.name,x.id])],a.assignee,{'data-change':'assignee','data-id':a.id}),
   '<span class="status '+(a.marks.includes('Replied')?'green':'')+'">'+e(a.marks.at(-1)||'Available')+'</span>',
@@ -57,7 +57,7 @@ function leads(ws,p,ui){
   .sort((a,b)=>(jevFitScore(b)??-1)-(jevFitScore(a)??-1)||a.name.localeCompare(b.name));
  const size=Number(ui.leadsSize)||25,page=Math.min(Number(ui.leadsPage)||0,Math.max(0,Math.ceil(matching.length/size)-1));
  const rows=matching.slice(page*size,(page+1)*size).map(l=>tr([
-  link(l.name,rowLink(l,p),'table-name')+'<small class="subline">'+e([l.domain,l.platform].filter(Boolean).join(' · '))+'</small>',
+   link(l.name,rowLink(l,p),'table-name')+(l.domainVerified==='valid'?'<span class="domain-tick" title="Domain verified — MX mail server live">✓</span>':'')+'<small class="subline">'+e([l.domain,l.platform].filter(Boolean).join(' · '))+'</small>',
    e(l.category||'—')+([l.city,l.country].some(Boolean)?' <span class="muted">· '+e([l.city,l.country].filter(Boolean).join(', '))+'</span>':''),
    jevChip(l),e(l.lifecycle),displayChannels.map(c=>channelTag(c,handles(l,c).length>0)).join(' ')
  ],{'data-open':rowLink(l,p)}));
