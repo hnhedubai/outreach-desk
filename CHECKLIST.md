@@ -4,7 +4,7 @@ Run this after every Codex change to `outreach-desk/`. The detailed rules live i
 `AGENTS.md` (§4 invariants) and `Jev_Scoring_Logic.md`; this is the quick pass/fail list.
 
 ## 1. Automated gate (must be green)
-- [ ] `npm run verify` → `check` OK, all tests pass, **0 skipped** (baseline: 78 tests).
+- [ ] `npm run verify` → `check` OK, all tests pass, **0 skipped** (baseline: 83 tests).
 - [ ] `npm test` count has not silently dropped (a removed/weakened test is a red flag).
 - [ ] No new dependency added beyond the one approved exception. `package.json`
       `dependencies` must contain exactly `pg@^8.23.1` and nothing else — `pg` exists solely
@@ -22,6 +22,9 @@ Run this after every Codex change to `outreach-desk/`. The detailed rules live i
       no-referrer` / `Cache-Control: no-store` unchanged.
 - [ ] **Auth**: scrypt hashing + constant-time compare, min-10 password, session cookie stays
       `HttpOnly; SameSite=Strict; Path=/`.
+- [ ] **Transport + store hygiene**: `enforceTlsVerification()` still runs before any provider or
+      DB connection and nothing re-adds a way to disable certificate verification; the startup line
+      names the active store; `OUTREACH_REQUIRE_NEON=1` still makes a missing `DATABASE_URL` fatal.
 - [ ] **PII**: email redaction runs before any payload leaves to TypeSafe; `erase` still
       requires the literal `ERASE` token and wipes contacts, channels, notes, drafts,
       description, source, fitReview and jevFit.

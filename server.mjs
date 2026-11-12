@@ -3,12 +3,12 @@ import {createHash} from 'node:crypto';
 import {readFile,mkdir} from 'node:fs/promises';
 import {join,dirname,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {openStore} from './db.mjs';
+import {enforceTlsVerification,openStore} from './db.mjs';
 import {createState,perform,cleanDomain,runDaily,reconcileAssignments,recordJevFit} from './model.mjs';
 import {currentJevFit,jevAvailable,jevInput,scoreWithJev} from './jev.mjs';
 import {firecrawlAvailable,firecrawlSearch} from './firecrawl.mjs';
 import {perplexityAvailable,perplexitySearch,limaAvailable,findLimaEmail} from './research-providers.mjs';
-import {authUsername,clearSessions,createSession,destroySession,ensureAuth,readAuth,sessionFrom,setPassword,verifyPassword} from './auth.mjs';
+import {authUsername,clearSessions,createSession,destroySession,ensureAuth,initSessions,readAuth,sessionFrom,setPassword,verifyPassword} from './auth.mjs';
 export function classifyStreamError(error,req){
  if(error&&error.status)return {status:error.status,message:error.message};
  if(req?.destroyed||req?.aborted||['ERR_STREAM_PREMATURE_CLOSE','ECONNRESET','EPIPE','ABORTED'].includes(error?.code))
@@ -33,8 +33,9 @@ export async function createApp({db:providedDb,dataDir:providedDataDir,port:requ
  const port=Number(requestedPort??process.env.PORT??8282);
  const dataDir=providedDataDir||process.env.OUTREACH_DATA_DIR||join(root,'data');
  if(serverMode()&&allowedHosts().size===0)throw new Error('OUTREACH_MODE=server requires OUTREACH_ALLOWED_HOSTS to list the public hostnames, comma-separated.');
-await mkdir(dataDir,{recursive:true});
-const store=await openStore({providedDb,dataDir});
+ await mkdir(dataDir,{recursive:true});
+ initSessions(dataDir);
+ const store=await openStore({providedDb,dataDir});
 const auth=await ensureAuth(dataDir);
 await store.seed(JSON.stringify(createState()));
 const read=async()=>{
@@ -221,7 +222,7 @@ const server=createServer(async(req,res)=>{
    const input=await body(req,50_000);
    if(input.username!==authUsername||!(await verifyPassword(dataDir,input.password)))throw requestError(401,'Incorrect username or password.');
    const token=createSession();
-   res.setHeader('Set-Cookie','outreach_session='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800');
+   res.setHeader('Set-Cookie','outreach_session='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000');
    send(res,200,{ok:true});
    return;
   }
@@ -242,7 +243,7 @@ const server=createServer(async(req,res)=>{
    if(!(await verifyPassword(dataDir,input.currentPassword)))throw requestError(401,'Current password is incorrect.');
    await setPassword(dataDir,input.newPassword);clearSessions();
    const token=createSession();
-   res.setHeader('Set-Cookie','outreach_session='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800');
+   res.setHeader('Set-Cookie','outreach_session='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000');
    send(res,200,{ok:true});return;
   }
   if(u.pathname==='/api/state'&&req.method==='GET'){send(res,200,stateResponse(await load()));return;}
@@ -311,7 +312,11 @@ return {
   const onListening=()=>{server.off('error',onError);resolveListen(server);};
   server.once('error',onError);
   server.once('listening',onListening);
-   server.listen(port,serverMode()?'0.0.0.0':'127.0.0.1',()=>console.log(serverMode()?'Outreach Desk · listening on 0.0.0.0:'+server.address().port+' (server mode)':'Outreach Desk · http://localhost:'+server.address().port+'/'));
+   server.listen(port,serverMode()?'0.0.0.0':'127.0.0.1',()=>{
+    const where=serverMode()?'listening on 0.0.0.0:'+server.address().port+' (server mode)':'http://localhost:'+server.address().port+'/';
+    const storeLabel=store.backend==='postgres'?'Neon Postgres (DATABASE_URL)':'local SQLite '+join(dataDir,'outreach.sqlite');
+    console.log('Outreach Desk · '+where+' · store: '+storeLabel);
+   });
  }),
  close:()=>new Promise(resolveClose=>{
   const finish=()=>{clearInterval(dailyInterval);Promise.resolve(store.close()).then(()=>resolveClose(),()=>resolveClose());};
@@ -322,6 +327,7 @@ return {
 
 const isMain=process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url);
 if(isMain){
+ if(enforceTlsVerification())console.log('Note: NODE_TLS_REJECT_UNAUTHORIZED=0 was inherited from the environment; TLS certificate verification is enforced regardless.');
  const app=await createApp();
  app.server.on('error',error=>{
   if(error.code==='EADDRINUSE')console.error('Outreach Desk could not start: port '+app.port+' is already in use. Close the other instance or set PORT to another port.');

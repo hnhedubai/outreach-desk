@@ -1,5 +1,5 @@
 import {contactAllowed} from './eligibility.js';
-import {outreachLink,e,go,link,btn,header,card,empty,table,tr,blankRow,form,field,area,check,select,tabs,note,date,day,ext,attr,segment,handles,handleLabel,channels,leadChannels,marks,lifecycles,rowLink,leadState,jevFitScore} from './ui.js';
+import {outreachLink,e,go,link,btn,header,card,empty,table,tr,blankRow,form,field,area,check,select,tabs,note,date,day,ext,attr,segment,handles,handleLabel,channels,leadChannels,marks,lifecycles,rowLink,leadState,jevFitScore,jevChip} from './ui.js';
 
 export const leadFields=(l={})=>'<div class="field-row">'+field('Company name','name',l.name,{required:true})+field('Company domain','domain',l.domain,{required:true,placeholder:'example.com'})+
  field('City','city',l.city)+field('Country / region','country',l.country)+field('Category','category',l.category)+
@@ -8,8 +8,7 @@ export const personFields=(c={})=>field('Full name','name',c.name,{required:true
  field('LinkedIn profile','linkedin',c.linkedin,{type:'url',placeholder:'https://www.linkedin.com/in/…'})+field('Source','source',c.source,{placeholder:'Company page or professional profile'});
 function fitReview(l,p,timezone,jevAvailable){
  const value=jevFitScore(l);
- const status=value!=null?value+' out of 4':l.jevFit?.stale?'Needs rescoring':'Unscored';
- const score='<div class="detail-meta"><span class="pill">'+e(status)+'</span>'+
+ const score='<div class="detail-meta">'+jevChip(l)+
  (!l.erasedAt&&value==null?btn('Score with Jev','jev-score','subtle',{disabled:!jevAvailable}):'')+
  link('Edit targeting →',go('targeting',p.id),'')+'</div>'+
  (value!=null?'<p class="small muted">'+e(l.jevFit.model)+' · '+e(date(l.jevFit.scoredAt,timezone))+'</p>':'')+
@@ -96,14 +95,21 @@ export function newProjectPage(ws,ui){
 export function findPage(ws,p,ui,{webSearch,firecrawlAvailable,perplexityAvailable}={}){
  const f=ui.find||{step:0,query:'',offer:p.targeting.offer||'',source:webSearch?'web':'local'};
  const steps=['Customers','Your business','Check search','Find'];
- const wizard='<ol class="step-list" aria-label="Search progress">'+steps.map((label,i)=>'<li class="'+(i===f.step?'active':'')+'"'+(i===f.step?' aria-current="step"':'')+'><span>'+label+'</span></li>').join('')+'</ol>';
+ const wizard='<ol class="step-list" aria-label="Search progress">'+steps.map((label,i)=>'<li class="'+(i===f.step?'active':i<f.step?'done':'')+'"'+(i===f.step?' aria-current="step"':'')+'><span>'+label+'</span></li>').join('')+'</ol>';
  let body='';
- if(f.step===0)body='<section class="find-question"><h2>Who are you looking for?</h2><p class="find-intro">Describe your ideal customers in your own words. Review the search before it runs.</p>'+
- '<form class="find-query" data-form="find-step"><textarea class="find-query-text" name="query" aria-label="Describe your ideal companies" required placeholder="e.g. European wind and solar developers seeking equity partners or co-development">'+e(f.query)+'</textarea>'+
+  if(f.step===0)body='<section class="find-question"><h2>Who are you looking for?</h2><p class="find-intro">Describe your ideal customers in your own words. odsk turns it into a search you can check before anything runs.</p>'+
+ '<form class="find-query" data-form="find-step"><textarea class="find-query-text" name="query" aria-label="Describe your ideal companies" required placeholder="e.g. Boutique hotels in Lisbon and Porto with their own website and 10–40 rooms">'+e(f.query)+'</textarea>'+
  '<div class="find-query-footer"><small>Mention the type of business, where, and what makes them a good fit.</small><button type="submit" class="btn primary"'+(f.query.trim()?'':' disabled')+'>Continue →</button></div></form>'+
  '<div class="find-examples"><p>Try an example</p>'+['European wind developers seeking equity partners','Solar owners in Spain with operating assets','US renewable power producers seeking co-development'].map(x=>'<button type="button" data-action="find-example" data-value="'+e(x)+'">'+e(x)+'<span aria-hidden="true">↗</span></button>').join('')+'</div></section>';
- if(f.step===1)body=card('Your business',form('find-step',area('What you offer','offer',f.offer)+field('Your website','website',f.website||p.targeting.website),'Continue'));
- if(f.step===2)body=card('Check search',form('find-search',area('Search description','query',f.query,{required:true})+'<label>Search source'+select('source',[
+  if(f.step===1)body='<div class="find-crumb">— Customers</div>'+
+  '<div class="find-looking"><span>Looking for</span><p>'+e(f.query||'—')+'</p></div>'+
+  '<h2 class="find-title">What do you sell them?</h2>'+
+  '<p class="find-help">We use this to score every company we find — high fit if they are likely to need it, low fit if they only match the search.</p>'+
+  card('Your business',form('find-step',field('Your website','website',f.website||p.targeting.website,{placeholder:'yourcompany.com'})+area('What you offer','offer',f.offer,{placeholder:'e.g. A tool that saves small teams time on a task they do every week.'}),'Build my search →'));
+  if(f.step===2)body='<div class="find-crumb">— Your business</div>'+
+  '<h2 class="find-title">Check the search</h2>'+
+  '<p class="find-help">Review what we’ll search for and choose a source before running it.</p>'+
+  card('Check search',form('find-search',area('Search description','query',f.query,{required:true})+'<label>Search source'+select('source',[
  ['Saved workspace leads','local'],...(webSearch?[['Exa company search','web']]:[]),
  ...(firecrawlAvailable?[['Firecrawl v2 web search (2 credits)','firecrawl']]:[]),
  ...(perplexityAvailable?[['Perplexity web search','perplexity']]:[])
@@ -111,11 +117,14 @@ export function findPage(ws,p,ui,{webSearch,firecrawlAvailable,perplexityAvailab
  (webSearch?note('Exa may use credits on the account connected to this server.'):'')+
  (firecrawlAvailable?note('Firecrawl checks the credit balance before searching. Review the results and select the company websites you want to add.'):'')+
  (perplexityAvailable?note('Perplexity searches use the account connected to this server.'):'')+
- (!webSearch&&!firecrawlAvailable&&!perplexityAvailable?note('Configure a web search provider in Apps.'):''),
- 'Find leads'));
- if(f.step===3){
-  const rows=f.rows||[], existing=new Set(p.leads.map(l=>l.domain)), reviewWebResults=['firecrawl','perplexity'].includes(f.source);
-  body=card('Review results',rows.length?form('find-add',
+  (!webSearch&&!firecrawlAvailable&&!perplexityAvailable?note('Configure a web search provider in Apps.'):''),
+  'Start search →'));
+  if(f.step===3){
+   const rows=f.rows||[], existing=new Set(p.leads.map(l=>l.domain)), reviewWebResults=['firecrawl','perplexity'].includes(f.source);
+   body='<div class="find-crumb">— Check search</div>'+
+   '<h2 class="find-title">Find</h2>'+
+   '<p class="find-help">'+(rows.length?rows.length+' companies matched your search. Keep the ones you want to add.':'No matching companies were found.')+'</p>'+
+   card('Review results',rows.length?form('find-add',
    (reviewWebResults?note('These web results can include articles and directories. Select the official company websites that match your search.'):'')+
    table(['Keep','Company','Domain','Region'],rows.map((r,i)=>tr([
    check('row-'+i,!reviewWebResults&&!existing.has(r.domain),'',{'aria-label':'Keep '+r.name}),

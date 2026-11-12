@@ -1,5 +1,5 @@
 import {contactAllowed,handleKey} from './eligibility.js';
-import {outreachLink,e,go,link,btn,header,card,empty,table,tr,blankRow,form,field,area,check,select,tabs,stat,bar,note,date,day,money,todayRows,channels,leadChannels,marks,lifecycles,icon,segment,ext,handles,handleLabel,enabledChannels,leadTitle,rowLink,leadState,worked,channelTag,lifecycleClass,jevFitScore} from './ui.js';
+import {outreachLink,e,go,link,btn,header,card,empty,table,tr,blankRow,form,field,area,check,select,tabs,stat,bar,note,date,day,money,todayRows,channels,leadChannels,marks,lifecycles,icon,segment,ext,handles,handleLabel,enabledChannels,leadTitle,rowLink,leadState,worked,channelTag,lifecycleClass,jevFitScore,jevChip,jevSearch} from './ui.js';
 
 const canAttempt=(ws,p,l,a)=>contactAllowed(ws,p,l,a.channel,a.handle)&&
  handles(l,a.channel).some(h=>handleKey(a.channel,h.value)===handleKey(a.channel,a.handle))&&
@@ -52,14 +52,14 @@ function leads(ws,p,ui){
  const filters={fit:ui.leadFit||'',state:ui.leadState||'',lifecycle:ui.leadLifecycle||'',channel:ui.leadChannel||''};
  const displayChannels=leadChannels.filter(channel=>p.configs[channel]?.enabled);
  const query=cleanFilter(ui.leadQuery);
- const matching=[...p.leads].filter(l=>(!query||[l.name,l.domain,l.city,l.country,l.category,...(l.fitReview?.assets.flatMap(asset=>[asset.name,asset.site])||[])].join(' ').toLowerCase().includes(query))&&
+  const matching=[...p.leads].filter(l=>(!query||[l.name,l.domain,l.city,l.country,l.category,jevSearch(l),...(l.fitReview?.assets.flatMap(asset=>[asset.name,asset.site])||[])].join(' ').toLowerCase().includes(query))&&
   (!filters.fit||(jevFitScore(l)!=null)===(filters.fit==='scored'))&&(!filters.state||leadState(l,p)===filters.state)&&(!filters.lifecycle||l.lifecycle===filters.lifecycle)&&(!filters.channel||handles(l,filters.channel).length))
   .sort((a,b)=>(jevFitScore(b)??-1)-(jevFitScore(a)??-1)||a.name.localeCompare(b.name));
  const size=Number(ui.leadsSize)||25,page=Math.min(Number(ui.leadsPage)||0,Math.max(0,Math.ceil(matching.length/size)-1));
  const rows=matching.slice(page*size,(page+1)*size).map(l=>tr([
   link(l.name,rowLink(l,p),'table-name')+'<small class="subline">'+e([l.domain,l.platform].filter(Boolean).join(' · '))+'</small>',
-  e(l.category||'—')+([l.city,l.country].some(Boolean)?' <span class="muted">· '+e([l.city,l.country].filter(Boolean).join(', '))+'</span>':''),
-  '<b>'+dash(jevFitScore(l))+'</b>', '<b>'+jevSeekingPct(l)+'</b>',e(l.lifecycle),displayChannels.map(c=>channelTag(c,handles(l,c).length>0)).join(' ')
+   e(l.category||'—')+([l.city,l.country].some(Boolean)?' <span class="muted">· '+e([l.city,l.country].filter(Boolean).join(', '))+'</span>':''),
+   jevChip(l),e(l.lifecycle),displayChannels.map(c=>channelTag(c,handles(l,c).length>0)).join(' ')
  ],{'data-open':rowLink(l,p)}));
  return header('Leads <span class="soft">'+p.leads.length+'</span>','Everyone in this project’s list, with reachability per channel.',btn('+ Add lead','dialog','primary',{'data-kind':'lead-add'}),
  '<b>'+p.leads.length+' / '+p.maxLeads.toLocaleString()+' leads</b> <span class="muted">· '+(p.maxLeads-p.leads.length)+' left</span> '+btn('Change','dialog','link',{'data-kind':'project-limit'}))+
@@ -68,7 +68,7 @@ function leads(ws,p,ui){
  select('Outreach state',[['Any outreach state',''],'Not contacted','Attempted, no reply','Replied on any channel','Opted out or bounced'],filters.state,{'data-filter':'leadState'})+
  select('Lifecycle',[['Any lifecycle',''],...lifecycles],filters.lifecycle,{'data-filter':'leadLifecycle'})+
  select('Channel',[['Any channel',''],...displayChannels],filters.channel,{'data-filter':'leadChannel'})+'<span class="count muted">'+matching.length+' shown</span></div>'+
- table(['Lead','Category','Fit score / 4','I','Lifecycle','Channels'],rows.length?rows:[blankRow(6,'No leads match these filters.')],'leads-table')+pager(size,matching.length,page,'leads');
+  table(['Lead','Category','Jev','Lifecycle','Channels'],rows.length?rows:[blankRow(5,'No leads match these filters.')],'leads-table')+pager(size,matching.length,page,'leads');
 }
 function overview(ws,p){
  const today=todayRows(ws,p), attempts=p.assignments.filter(a=>a.marks.includes('Attempted')),replies=attempts.filter(a=>a.marks.includes('Replied')).length;

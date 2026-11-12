@@ -1,10 +1,21 @@
 import {randomBytes,scryptSync,timingSafeEqual} from 'node:crypto';
 import {readFile,writeFile,rename} from 'node:fs/promises';
+import {readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 
 const username='admin';
 const passwordFile=dataDir=>join(dataDir,'auth.json');
 const sessions=new Map();
+// Personal single-user install: sessions live ~1 year and persist to disk so a
+// server restart no longer logs you out. storePath is set by initSessions().
+const SESSION_MS=365*24*60*60*1000;
+let storePath=null;
+const persist=()=>{if(!storePath)return;try{writeFileSync(storePath,JSON.stringify([...sessions.entries()]),{encoding:'utf8'});}catch{}};
+export function initSessions(dataDir){
+ storePath=join(dataDir,'sessions.json');
+ try{for(const [token,expires] of JSON.parse(readFileSync(storePath,'utf8'))){if(Number.isFinite(expires)&&expires>Date.now())sessions.set(token,expires);}}catch{}
+ persist();
+}
 
 const passwordBytes=(password,salt)=>scryptSync(password,salt,32);
 const validPassword=password=>typeof password==='string'&&password.length>=10&&password.length<=200;
@@ -51,15 +62,16 @@ export async function setPassword(dataDir,password){
 }
 export function createSession(){
  const token=randomBytes(32).toString('base64url');
- sessions.set(token,Date.now()+8*60*60*1000);
+ sessions.set(token,Date.now()+SESSION_MS);
+ persist();
  return token;
 }
 export function sessionFrom(req){
  const value=String(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith('outreach_session='));
  const token=value?.slice('outreach_session='.length);
  const expires=token&&sessions.get(token);
- if(!expires||expires<Date.now()){if(token)sessions.delete(token);return null;}
+ if(!expires||expires<Date.now()){if(token){sessions.delete(token);persist();}return null;}
  return token;
 }
-export function destroySession(req){const token=sessionFrom(req);if(token)sessions.delete(token);}
-export function clearSessions(){sessions.clear();}
+export function destroySession(req){const token=sessionFrom(req);if(token){sessions.delete(token);persist();}}
+export function clearSessions(){sessions.clear();persist();}

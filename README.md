@@ -48,5 +48,5 @@ Local setup and checks:
 - `npm run check` validates the JavaScript; `npm test` runs the suite. `npm run verify` runs both.
 - Tests use the SQLite store and require no credentials or network.
 
-The app reads `DATABASE_URL` when set (Neon Postgres) and falls back to the local SQLite file otherwise. `.env` and `node_modules/` are gitignored — never commit them or any secret. The `Outreach Desk` GitHub Actions workflow runs the **Verify** job on every push and pull request.
+The app reads `DATABASE_URL` when set (Neon Postgres) and falls back to the local SQLite file otherwise. The startup line names the store it actually chose — `store: Neon Postgres (DATABASE_URL)` or `store: local SQLite <path>` — because the two are not replicas: a stale SQLite document would otherwise be served as though it were current. Where Neon is the source of truth, set `OUTREACH_REQUIRE_NEON=1` and startup refuses rather than falling back. TLS certificate verification is always enforced; an inherited `NODE_TLS_REJECT_UNAUTHORIZED=0` is discarded at boot and reported. `.env` and `node_modules/` are gitignored — never commit them or any secret. The `Outreach Desk` GitHub Actions workflow runs the **Verify** job on every push and pull request.
 

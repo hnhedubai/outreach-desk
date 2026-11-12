@@ -67,7 +67,13 @@ built-in `node:sqlite` and loads nothing external at runtime. Full rule in §5.
 8. **Provider clients.** Keep `redirect:'error'`, an `AbortSignal.timeout`, the busy/lock
    guards, and the credit floors (Firecrawl 105-credit reserve; LimaData >=4 credits for
    `find/email_work`).
-   Outcomes must be reviewed before saving; deliverability stays labelled unverified.
+    Outcomes must be reviewed before saving; deliverability stays labelled unverified.
+ 9. **TLS verification and store choice are never left to the ambient environment.** Startup
+    calls `enforceTlsVerification()` (`db.mjs`) before any provider or database connection, so an
+    inherited `NODE_TLS_REJECT_UNAUTHORIZED=0` cannot silently disable certificate verification on
+    requests carrying lead PII. Do not add a flag to re-disable it. The startup line names the
+    active store, and `OUTREACH_REQUIRE_NEON=1` makes a missing `DATABASE_URL` fatal instead of
+    falling back to a SQLite document that may be stale.
 
 ## 5. Coding conventions
 - Match the existing compact style: no spaces inside `{}`/`()` for short helpers, arrow

@@ -59,6 +59,9 @@ export function handles(lead,ch){
 }
 export const worked=a=>a.marks.length>0;
 export const jevFitScore=l=>l.jevFit?.stale?null:l.jevFit?.score??null;
+export const jevGradeOf=l=>{const j=l.jevFit;if(!j||j.stale||!Number.isFinite(j.score))return null;const number=Math.round(j.score/4*100);const letter=j.tier==='Strong'?'A':j.tier==='Partial'?'B':j.tier==='Watch'?'C':j.tier==='Funded'?'F':'';return{number,letter,tier:j.tier||'',seeking:Number.isFinite(j.seekingInvestment)?Math.round(j.seekingInvestment*100):null,components:j.components||{}};};
+export const jevSearch=l=>{const g=jevGradeOf(l);return g?[g.letter,g.number,g.tier,g.seeking].filter(x=>x!==''&&x!=null).join(' ').toLowerCase():'';};
+export const jevChip=l=>{const j=l.jevFit;if(!j)return '<span class="jev-chip none">Unscored</span>';if(j.stale)return '<span class="jev-chip stale">Needs rescoring</span>';const g=jevGradeOf(l);if(!g)return '<span class="jev-chip none">Unscored</span>';const c=g.components;const title=['Scale '+(c.scaleGeography??'—'),'Stage '+(c.developmentStage??'—'),'Permits/offtake '+(c.permitsOfftake??'—'),'Bankability '+(c.bankabilityCapitalNeed??'—')].join(' · ');const seg=(label,val)=>'<span class="jev-seg">'+label+' <b>'+val+'</b></span>';return '<span class="jev-chip" title="'+e(title)+'">'+(g.letter?'<span class="jev-grade '+e(g.letter.toLowerCase())+'">'+g.letter+'</span>':'')+'<b class="jev-num">'+g.number+'</b>'+seg('Seek',g.seeking==null?'—':g.seeking+'%')+(g.tier?seg('Tier',g.tier):'')+'</span>';};
 export const leadState=(l,p)=>{const m=p.assignments.filter(a=>a.leadId===l.id).flatMap(a=>a.marks);return m.some(x=>x==='Opt-out'||x==='Bounce')?'Opted out or bounced':m.includes('Replied')?'Replied on any channel':m.includes('Attempted')?'Attempted, no reply':'Not contacted';};
 export const lifecycleClass=x=>'status'+(['Active','Engaged'].includes(x)?' green':'');
 export const enabledChannels=p=>channels.filter(x=>p.configs[x].enabled);
