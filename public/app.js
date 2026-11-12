@@ -30,7 +30,7 @@ function shell(r,body){
  btn('Change password','dialog','',{'data-kind':'password-change'})+btn('Cookie settings','dialog','',{'data-kind':'cookie'})+btn('Sign out','logout','subtle')+'</div>':'';
  const wsItems=[['Home','home'],['Team','team'],['Do-not-contact','dnc'],['Settings','settings'],['Apps','apps']];
  const actions=p&&page!=='agent'?'<button type="button" class="btn notify" data-action="enrichment-menu"><span class="enriched-check" aria-hidden="true">✓</span>Enriched <span>'+p.enrichments.length+'</span></button><a class="btn primary agent-entry" href="'+go('agent',p.id)+'">Agent mode <span class="agent-count">'+n+' mine</span></a>':'';
- return '<div class="shell"><div class="brand-head"><button type="button" class="brand" data-action="menu" data-value="workspace" aria-expanded="'+(menu==='workspace')+'"><span class="logo">'+icon('logo')+'</span>'+e(ws.name)+icon('down')+'</button>'+workspaceMenu+'</div>'+
+ return '<div class="shell"><div class="brand-head"><button type="button" class="brand" data-action="menu" data-value="workspace" aria-expanded="'+(menu==='workspace')+'"><span class="logo"><img class="logo-img" src="/icon-192.png" alt="" width="28" height="28"></span>'+e(ws.name)+icon('down')+'</button>'+workspaceMenu+'</div>'+
  '<header class="topbar"><div class="crumb">'+btn('☰','mobile-menu','subtle',{id:'menu-toggle','aria-label':'Open navigation'})+
  link(ws.name,go('home'),'')+' <span>/</span> '+(p?link(p.name,go('overview',p.id),'')+' <span>/</span> ':'')+e(labelOf(r))+'</div><div class="head-actions">'+actions+'</div></header>'+
  '<aside class="sidebar '+(ui.mobile?'open':'')+'"><nav class="nav-scroll" aria-label="Main navigation">'+wsItems.map(([name,key])=>nav(name,key,go(key),!p&&(page===key||(key==='settings'&&['usage','audit'].includes(page))))).join('')+
@@ -94,7 +94,7 @@ function notify(text,error=false){
  noticeTimer=setTimeout(()=>{toast.className='';},5200);
 }
 function loginPage(message=''){
- return '<main class="auth-page"><section class="auth-card"><div class="auth-brand"><span class="logo">'+icon('logo')+'</span><span>Outreach Desk</span></div>'+
+ return '<main class="auth-page"><section class="auth-card"><div class="auth-brand"><span class="logo"><img class="logo-img" src="/icon-192.png" alt="" width="28" height="28"></span><span>Outreach Desk</span></div>'+
  '<h1>Welcome back</h1><p class="auth-intro">Sign in to manage your projects, leads and research workspace.</p>'+
  '<form class="auth-form" data-form="login">'+field('Username','username','admin',{autocomplete:'username',required:true})+
  '<label>Password<div class="password-field"><input type="password" name="password" autocomplete="current-password" required><button type="button" class="password-toggle" data-action="toggle-password">Show</button></div></label>'+
@@ -226,7 +226,7 @@ function workspaceWizardHtml(){
  const w=ui.wsWizard,step=w.step||1;
  const host=(location.host||'localhost')+'/';
   const bullets=['Group projects, leads and outreach in one place','Invite teammates as Agents or Admins','Time zone sets when daily worklists build','API keys and limits stay inside the workspace'];
-  const left='<div class="wizard-left"><div class="wizard-brand"><span class="logo">'+icon('logo')+'</span><div><span class="wizard-brand-name">Outreach Desk</span><span class="wizard-brand-tag">One desk for outreach, leads and research.</span></div></div>'+
+  const left='<div class="wizard-left"><div class="wizard-brand"><span class="logo"><img class="logo-img" src="/icon-192.png" alt="" width="28" height="28"></span><div><span class="wizard-brand-name">Outreach Desk</span><span class="wizard-brand-tag">One desk for outreach, leads and research.</span></div></div>'+
    '<div class="wizard-left-body"><h2>Set up a new workspace</h2><p>A workspace holds your projects, people, leads and research. Name it after your company or team, then invite the people who will work the lists.</p>'+
    '<ul class="wizard-bullets">'+bullets.map(b=>'<li><span class="wizard-bullet-ck">'+icon('check')+'</span><span>'+e(b)+'</span></li>').join('')+'</ul></div>'+
    '<div class="wizard-foot">© 2026 Outreach Desk</div></div>';

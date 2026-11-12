@@ -25,7 +25,8 @@ p{line-height:1.5}
 .brand-head{position:relative;display:flex;border-bottom:1px solid var(--line-light);border-right:1px solid var(--line);align-items:center;padding:0 16px}
 .brand{display:flex;align-items:center;gap:14px;width:100%;text-align:left;background:none;border:0;font-weight:700;padding:0}
 .brand>svg:last-child{margin-left:auto;color:var(--muted)}
-.logo{width:28px;height:28px;display:grid;place-items:center;background:linear-gradient(135deg,#08060c 0%,#3a1d4a 100%);border-radius:7px;color:white;box-shadow:inset 0 0 0 1px #0001}
+.logo{width:28px;height:28px;display:grid;place-items:center;border-radius:7px;color:white;box-shadow:inset 0 0 0 1px #0001;overflow:hidden}
+.logo-img{width:100%;height:100%;display:block;object-fit:cover}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;border-bottom:1px solid var(--line);padding:0 16px}
 .crumb{display:flex;align-items:center;gap:7px;color:#5a5247;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .crumb span{color:var(--soft)}
