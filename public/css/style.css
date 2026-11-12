@@ -295,25 +295,34 @@ fieldset{border:0;padding:0;margin:0;min-width:0}
 .auth-help strong{color:var(--text)}
 @media(max-width:520px){.auth-card{padding:28px 22px}}
 
-/* Add-workspace 3-step wizard — split-screen dialog mirroring the reference onboarding. Scoped to dialog.wizard. */
-dialog.wizard{width:min(1000px,calc(100vw - 32px));padding:0;border-radius:16px;overflow:hidden;max-height:calc(100vh - 48px)}
-dialog.wizard::backdrop{background:#29201855}
-.wizard-body{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);min-height:520px}
-.wizard-left{background:#241f1a;color:#f5efe6;padding:32px 30px;display:flex;flex-direction:column;gap:16px}
-.wizard-brand{display:flex;align-items:center;gap:10px;font-family:"Space Grotesk",Inter,sans-serif;font-weight:700;font-size:16px}
-.wizard-brand .logo{color:#fff}
+/* Add-workspace wizard — split-screen dialog matching the Kitfox design system (2-step + ready screen). Scoped to dialog.wizard; reuses the --kf palette tokens. */
+dialog.wizard{--accent:#e85d26;--accent-dark:#c9491a;width:min(1000px,calc(100vw - 32px));padding:0;border-radius:16px;overflow:hidden;max-height:calc(100vh - 48px)}
+dialog.wizard::backdrop{background:#1a1a1a66}
+dialog.wizard .btn.primary:hover{background:var(--accent-dark)}
+.wizard-body{display:grid;grid-template-columns:minmax(0,40%) minmax(0,60%);min-height:520px}
+.wizard-left{background:#1a1a1a;color:#f5efe6;padding:32px 30px;display:flex;flex-direction:column}
+.wizard-brand{display:flex;align-items:center;gap:12px}
+.wizard-brand .logo{width:30px;height:30px;border-radius:8px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.wizard-brand .logo .icon{width:16px;height:16px}
+.wizard-brand-name{display:block;font-family:"Space Grotesk",Inter,sans-serif;font-weight:700;font-size:16px;color:#fff;line-height:1.2}
+.wizard-brand-tag{display:block;font-size:12px;color:#9a938a;margin-top:1px}
+.wizard-left-body{display:flex;flex-direction:column;gap:14px;margin:auto 0;padding:24px 0}
 .wizard-left h2{font-size:24px;line-height:1.2;letter-spacing:-.02em;color:#fff}
 .wizard-left p{color:#c9c2b8;line-height:1.55;font-size:14px}
 .wizard-bullets{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:11px}
-.wizard-bullets li{display:flex;align-items:flex-start;gap:9px;font-size:13.5px;line-height:1.45;color:#e9e2d8}
-.wizard-bullets .icon{color:#4caf87;flex-shrink:0;margin-top:2px;width:15px;height:15px}
-.wizard-foot{margin-top:auto;font-size:12px;color:#8a8378}
-.wizard-right{padding:30px 34px;display:flex;flex-direction:column;overflow:auto}
+.wizard-bullets li{display:flex;align-items:flex-start;gap:10px;font-size:13.5px;line-height:1.45;color:#e9e2d8}
+.wizard-bullet-ck{width:18px;height:18px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.wizard-bullet-ck .icon{width:11px;height:11px}
+.wizard-foot{font-size:12px;color:#8a8378}
+.wizard-right{background:#f8f5ef;padding:30px 34px;display:flex;flex-direction:column;overflow:auto}
+.wizard-col{width:100%;max-width:440px;margin:0 auto;display:flex;flex-direction:column}
 .wizard-progress{display:flex;align-items:center;gap:12px;margin-bottom:22px}
 .wizard-track{display:flex;gap:5px;flex:1;max-width:220px}
-.wizard-track i{height:4px;border-radius:2px;background:var(--line);flex:1}
+.wizard-track i{height:4px;border-radius:2px;background:#e5e0d8;flex:1}
 .wizard-track i.on{background:var(--accent)}
 .wizard-progress span{font-size:12px;font-weight:650;color:var(--muted);white-space:nowrap}
+.wizard-back{align-self:flex-start;background:none;border:0;padding:0;margin-bottom:10px;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer}
+.wizard-back:hover{color:var(--accent)}
 .wizard-right h2{font-size:22px;line-height:1.2;letter-spacing:-.02em}
 .wizard-sub{margin-top:6px;color:var(--muted);line-height:1.5;font-size:14px}
 .wizard-right .form{margin-top:22px}
@@ -334,6 +343,10 @@ dialog.wizard::backdrop{background:#29201855}
 .wizard-invite-row .row-remove-spacer{height:34px}
 .add-another{align-self:flex-start;margin-top:14px;background:none;border:0;padding:0;color:var(--accent);font-size:13.5px;font-weight:650;cursor:pointer}
 .add-another:hover{text-decoration:underline}
+.wizard-actions{display:flex;flex-direction:column;gap:4px;margin-top:22px}
+.wizard-actions .btn.primary{width:100%;justify-content:center}
+.wizard-actions .btn.ghost{background:none;border:0;min-height:auto;padding:8px;color:var(--muted);font-weight:600;font-size:13px;align-self:center}
+.wizard-actions .btn.ghost:hover{color:var(--text)}
 .wizard-success{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;margin:auto 0;padding:24px 0}
 .wizard-success-icon{width:56px;height:56px;border-radius:14px;background:#e7f5ee;color:#4caf87;display:flex;align-items:center;justify-content:center}
 .wizard-success-icon .icon{width:28px;height:28px}

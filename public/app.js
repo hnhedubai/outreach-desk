@@ -225,33 +225,34 @@ async function createWorkspaceFromWizard(rows){
 function workspaceWizardHtml(){
  const w=ui.wsWizard,step=w.step||1;
  const host=(location.host||'localhost')+'/';
- const bullets=['Group projects, leads and outreach in one place','Invite teammates as Agents or Admins','Time zone sets when daily worklists build','API keys and limits stay inside the workspace'];
- const left='<div class="wizard-left"><div class="wizard-brand"><span class="logo">'+icon('logo')+'</span><span>Outreach Desk</span></div>'+
-  '<h2>Set up a new workspace</h2><p>A workspace holds your projects, people, leads and research. Name it after your company or team, then invite the people who will work the lists.</p>'+
-  '<ul class="wizard-bullets">'+bullets.map(b=>'<li>'+icon('check')+'<span>'+e(b)+'</span></li>').join('')+'</ul>'+
-  '<div class="wizard-foot">© 2026 Outreach Desk</div></div>';
-  const track='<div class="wizard-track"><i class="on"></i><i class="'+(step>=2?'on':'')+'"></i><i class="'+(step>=3?'on':'')+'"></i></div>';
-  const progress=step<3?'<div class="wizard-progress">'+track+'<span>Step '+step+' of 3</span></div>':'';
-  let right='';
-  if(step===1){
-   const info=wsSlugInfo(w.slug),msg=wsSlugMessage(location.host||'localhost',info);
-   right='<h2>Name your workspace</h2><p class="wizard-sub">Usually your company or team. Projects, people and settings live here.</p>'+
-    '<form class="form" data-form="workspace-add-step1">'+
-    '<label>Workspace name<input name="name" value="'+e(w.name)+'" maxlength="80" required autocomplete="off"></label>'+
-    '<label>URL<div class="url-field"><span class="url-prefix">'+e(host)+'</span><input name="slug" value="'+e(w.slug)+'" placeholder="acme" maxlength="80" autocomplete="off" spellcheck="false" aria-label="Workspace URL"></div></label>'+
-    '<p class="url-status '+msg.cls+'" data-slug-status>'+e(msg.text)+'</p>'+
-    '<div class="actions"><button type="button" class="btn subtle" data-action="close-dialog">Cancel</button><button type="submit" class="btn primary"'+(info.state==='taken'||info.state==='invalid'?' disabled':'')+'>Continue to invite your team →</button></div></form>';
-   }else if(step===2){
-    const invites=(w.invites&&w.invites.length)?w.invites:[{email:'',role:'Agent'}];
-    const rows=invites.map((m,i)=>'<div class="wizard-invite-row"><label>Email<input name="inviteEmail" type="email" value="'+e(m.email)+'" placeholder="teammate@company.com" autocomplete="off"></label><label>Role'+select('inviteRole',['Agent','Admin'],m.role||'Agent')+'</label>'+(invites.length>1?'<button type="button" class="row-remove" data-action="ws-invite-remove" data-index="'+i+'" aria-label="Remove invitation">&times;</button>':'<span class="row-remove-spacer"></span>')+'</div>').join('');
-    right='<h2>Invite your team</h2><p class="wizard-sub">Invite the people who will work '+e(w.name||'this workspace')+'. Admins can also manage projects, channels and settings. You can do this later too.</p>'+
-     '<div class="wizard-invite-rows">'+rows+'</div>'+
-     '<button type="button" class="add-another" data-action="ws-invite-another">+ Add another</button>'+
-     '<form class="form" data-form="workspace-add-step2"><div class="actions"><button type="button" class="btn subtle" data-action="ws-step-back">← Back</button><button type="button" class="btn subtle" data-action="ws-skip">Skip for now</button><button type="submit" class="btn primary">Finish</button></div></form>';
-   }else{
-    right='<div class="wizard-success"><div class="wizard-success-icon">'+icon('check')+'</div><h2>'+e(w.name||'Your workspace')+' is ready</h2><p class="wizard-sub">Next, set up your first project. We’ll start by reading your website.</p>'+link('Create your first project →',go('new'),'btn primary')+'</div>';
-   }
- return '<div class="wizard-body">'+left+'<div class="wizard-right">'+progress+right+'</div></div>';
+  const bullets=['Group projects, leads and outreach in one place','Invite teammates as Agents or Admins','Time zone sets when daily worklists build','API keys and limits stay inside the workspace'];
+  const left='<div class="wizard-left"><div class="wizard-brand"><span class="logo">'+icon('logo')+'</span><div><span class="wizard-brand-name">Outreach Desk</span><span class="wizard-brand-tag">One desk for outreach, leads and research.</span></div></div>'+
+   '<div class="wizard-left-body"><h2>Set up a new workspace</h2><p>A workspace holds your projects, people, leads and research. Name it after your company or team, then invite the people who will work the lists.</p>'+
+   '<ul class="wizard-bullets">'+bullets.map(b=>'<li><span class="wizard-bullet-ck">'+icon('check')+'</span><span>'+e(b)+'</span></li>').join('')+'</ul></div>'+
+   '<div class="wizard-foot">© 2026 Outreach Desk</div></div>';
+   const track='<div class="wizard-track"><i class="on"></i><i class="'+(step>=2?'on':'')+'"></i></div>';
+   const progress=step<3?'<div class="wizard-progress">'+track+'<span>Step '+step+' of 2</span></div>':'';
+   let right='';
+   if(step===1){
+    const info=wsSlugInfo(w.slug),msg=wsSlugMessage(location.host||'localhost',info);
+    right='<h2>Name your workspace</h2><p class="wizard-sub">Usually your company or team. Projects, people and settings live here.</p>'+
+     '<form class="form" data-form="workspace-add-step1">'+
+     '<label>Workspace name<input name="name" value="'+e(w.name)+'" maxlength="80" required autocomplete="off"></label>'+
+     '<label>URL<div class="url-field"><span class="url-prefix">'+e(host)+'</span><input name="slug" value="'+e(w.slug)+'" placeholder="acme" maxlength="80" autocomplete="off" spellcheck="false" aria-label="Workspace URL"></div></label>'+
+     '<p class="url-status '+msg.cls+'" data-slug-status>'+e(msg.text)+'</p>'+
+     '<div class="wizard-actions"><button type="submit" class="btn primary"'+(info.state==='taken'||info.state==='invalid'?' disabled':'')+'>Continue to invite your team →</button><button type="button" class="btn ghost" data-action="close-dialog">Cancel</button></div></form>';
+    }else if(step===2){
+     const invites=(w.invites&&w.invites.length)?w.invites:[{email:'',role:'Agent'}];
+     const rows=invites.map((m,i)=>'<div class="wizard-invite-row"><label>Email<input name="inviteEmail" type="email" value="'+e(m.email)+'" placeholder="teammate@company.com" autocomplete="off"></label><label>Role'+select('inviteRole',['Agent','Admin'],m.role||'Agent')+'</label>'+(invites.length>1?'<button type="button" class="row-remove" data-action="ws-invite-remove" data-index="'+i+'" aria-label="Remove invitation">&times;</button>':'<span class="row-remove-spacer"></span>')+'</div>').join('');
+     right='<button type="button" class="wizard-back" data-action="ws-step-back">← Back</button>'+
+      '<h2>Invite your team</h2><p class="wizard-sub">Invite the people who will work '+e(w.name||'this workspace')+'. Admins can also manage projects, channels and settings. You can do this later too.</p>'+
+      '<div class="wizard-invite-rows">'+rows+'</div>'+
+      '<button type="button" class="add-another" data-action="ws-invite-another">+ Add another</button>'+
+      '<form class="form" data-form="workspace-add-step2"><div class="wizard-actions"><button type="submit" class="btn primary">Finish</button><button type="button" class="btn ghost" data-action="ws-skip">Skip for now</button></div></form>';
+    }else{
+     right='<div class="wizard-success"><div class="wizard-success-icon">'+icon('check')+'</div><h2>'+e(w.name||'Your workspace')+' is ready</h2><p class="wizard-sub">Next, set up your first project. We’ll start by reading your website.</p>'+link('Create your first project →',go('new'),'btn primary')+'</div>';
+    }
+  return '<div class="wizard-body">'+left+'<div class="wizard-right"><div class="wizard-col">'+progress+right+'</div></div></div>';
 }
 const hidden=(name,value)=>'<input type="hidden" name="'+e(name)+'" value="'+e(value)+'">';
 const values=form=>Object.fromEntries(new FormData(form));
