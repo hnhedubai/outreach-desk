@@ -42,7 +42,7 @@ p{line-height:1.5}
 .nav-badge{margin-left:auto;font-size:11px;color:var(--muted)}
 .account{display:flex;align-items:center;gap:12px;padding:15px 19px;border:0;border-top:1px solid var(--line);background:var(--paper);text-align:left;min-height:73px}
 .account .dots{margin-left:auto}
-.avatar{display:inline-grid;place-items:center;min-width:29px;height:29px;border-radius:50%;background:var(--peach);color:var(--accent-dark);font-size:11px;font-weight:700}
+.avatar{display:inline-grid;place-items:center;min-width:29px;height:29px;border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:600}
 .avatar.small{min-width:23px;height:23px}
 .main{min-width:0;overflow-y:scroll;overflow-x:auto;background:var(--canvas);grid-column:2;grid-row:2;padding:24px 48px 52px;scrollbar-width:auto;scrollbar-color:#c6beb2 transparent}
 .wrap{max-width:1500px;margin:0 auto}
