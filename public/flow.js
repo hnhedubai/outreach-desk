@@ -97,7 +97,7 @@ export function findPage(ws,p,ui,{webSearch,firecrawlAvailable,perplexityAvailab
  const steps=['Customers','Your business','Check search','Find'];
  const wizard='<ol class="step-list" aria-label="Search progress">'+steps.map((label,i)=>'<li class="'+(i===f.step?'active':i<f.step?'done':'')+'"'+(i===f.step?' aria-current="step"':'')+'><span>'+label+'</span></li>').join('')+'</ol>';
  let body='';
-  if(f.step===0)body='<section class="find-question"><h2>Who are you looking for?</h2><p class="find-intro">Describe your ideal customers in your own words. odsk turns it into a search you can check before anything runs.</p>'+
+  if(f.step===0)body='<section class="find-question"><h2>Who are you looking for?</h2><p class="find-intro">Describe your ideal customers in your own words. Vitalise turns it into a search you can check before anything runs.</p>'+
  '<form class="find-query" data-form="find-step"><textarea class="find-query-text" name="query" aria-label="Describe your ideal companies" required placeholder="e.g. Boutique hotels in Lisbon and Porto with their own website and 10–40 rooms">'+e(f.query)+'</textarea>'+
  '<div class="find-query-footer"><small>Mention the type of business, where, and what makes them a good fit.</small><button type="submit" class="btn primary"'+(f.query.trim()?'':' disabled')+'>Continue →</button></div></form>'+
  '<div class="find-examples"><p>Try an example</p>'+['European wind developers seeking equity partners','Solar owners in Spain with operating assets','US renewable power producers seeking co-development'].map(x=>'<button type="button" data-action="find-example" data-value="'+e(x)+'">'+e(x)+'<span aria-hidden="true">↗</span></button>').join('')+'</div></section>';

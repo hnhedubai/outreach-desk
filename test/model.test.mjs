@@ -1,4 +1,4 @@
-// Behavioural locks for the Outreach Desk reducer (model.mjs).
+// Behavioural locks for the Vitalise reducer (model.mjs).
 // Zero dependencies: runs on Node 24's built-in test runner (npm test).
 // These encode invariants that are easy to regress when an agent edits the reducer.
 import {test} from 'node:test';

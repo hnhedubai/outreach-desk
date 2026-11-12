@@ -316,7 +316,7 @@ return {
    server.listen(port,serverMode()?'0.0.0.0':'127.0.0.1',()=>{
     const where=serverMode()?'listening on 0.0.0.0:'+server.address().port+' (server mode)':'http://localhost:'+server.address().port+'/';
     const storeLabel=store.backend==='postgres'?'Neon Postgres (DATABASE_URL)':'local SQLite '+join(dataDir,'outreach.sqlite');
-    console.log('Outreach Desk · '+where+' · store: '+storeLabel);
+    console.log('Vitalise · '+where+' · store: '+storeLabel);
    });
  }),
  close:()=>new Promise(resolveClose=>{
@@ -331,8 +331,8 @@ if(isMain){
  if(enforceTlsVerification())console.log('Note: NODE_TLS_REJECT_UNAUTHORIZED=0 was inherited from the environment; TLS certificate verification is enforced regardless.');
  const app=await createApp();
  app.server.on('error',error=>{
-  if(error.code==='EADDRINUSE')console.error('Outreach Desk could not start: port '+app.port+' is already in use. Close the other instance or set PORT to another port.');
-  else if(error.code==='EACCES')console.error('Outreach Desk could not bind port '+app.port+': permission denied.');
+  if(error.code==='EADDRINUSE')console.error('Vitalise could not start: port '+app.port+' is already in use. Close the other instance or set PORT to another port.');
+  else if(error.code==='EACCES')console.error('Vitalise could not bind port '+app.port+': permission denied.');
   else console.error('Server error:',error.message);
   process.exitCode=1;
  });

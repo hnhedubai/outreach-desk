@@ -9,9 +9,9 @@ const dataDir=process.env.OUTREACH_DATA_DIR||join(dirname(fileURLToPath(import.m
 await mkdir(dataDir,{recursive:true});
 const rl=createInterface({input,output});
 try{
- const first=await rl.question('New Outreach Desk password ('+passwordRules+'): ');
+ const first=await rl.question('New Vitalise password ('+passwordRules+'): ');
  const second=await rl.question('Confirm password: ');
  if(first!==second)throw Error('Passwords do not match.');
  await setPassword(dataDir,first);
- console.log('Password reset completed. Restart Outreach Desk and log in as admin.');
+ console.log('Password reset completed. Restart Vitalise and log in as admin.');
 }finally{rl.close();}

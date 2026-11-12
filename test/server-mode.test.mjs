@@ -75,7 +75,7 @@ test('server mode serves the configured public host',async()=>{
   await withServerMode(async({port})=>{
     const response=await request({port,host:PUBLIC_HOST});
     assert.equal(response.status,200);
-    assert.match(response.body,/Outreach Desk/);
+    assert.match(response.body,/Vitalise/);
   });
 });
 

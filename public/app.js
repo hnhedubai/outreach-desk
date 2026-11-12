@@ -52,7 +52,7 @@ function fallbackView(){
   app.replaceChildren(card);
  }catch(fallbackError){
   console.error(fallbackError);
-  if(app)app.textContent='Outreach Desk hit an unexpected error. Reload the page.';
+  if(app)app.textContent='Vitalise hit an unexpected error. Reload the page.';
  }
 }
 function reportUiError(error){
@@ -82,7 +82,7 @@ function render({keepScroll=true,restoreInput}={}){
    const input=app.querySelector('[data-input="'+CSS.escape(restoreInput.key)+'"]');
    if(input){input.focus({preventScroll:true});try{input.setSelectionRange(restoreInput.start,restoreInput.end);}catch{}}
   }
-  document.title=labelOf(r)+' · Outreach Desk';
+  document.title=labelOf(r)+' · Vitalise';
  }catch(error){
   console.error(error);
   try{notify(renderErrorMessage,true);}catch(notifyError){console.error(notifyError);}
@@ -94,12 +94,12 @@ function notify(text,error=false){
  noticeTimer=setTimeout(()=>{toast.className='';},5200);
 }
 function loginPage(message=''){
- return '<main class="auth-page"><section class="auth-card"><div class="auth-brand"><span class="logo"><img class="logo-img" src="/icon-192.png" alt="" width="28" height="28"></span><span>Outreach Desk</span></div>'+
+ return '<main class="auth-page"><section class="auth-card"><div class="auth-brand"><span class="logo"><img class="logo-img" src="/icon-192.png" alt="" width="28" height="28"></span><span>Vitalise</span></div>'+
  '<h1>Welcome back</h1><p class="auth-intro">Sign in to manage your projects, leads and research workspace.</p>'+
  '<form class="auth-form" data-form="login">'+field('Username','username','admin',{autocomplete:'username',required:true})+
  '<label>Password<div class="password-field"><input type="password" name="password" autocomplete="current-password" required><button type="button" class="password-toggle" data-action="toggle-password">Show</button></div></label>'+
  (message?'<p class="auth-error">'+e(message)+'</p>':'')+'<button class="btn primary auth-submit" type="submit">Sign in</button></form>'+
- '<p class="auth-help">Forgot your password? Run <strong>npm run reset-password</strong> in the Outreach Desk folder.</p></section></main>';
+ '<p class="auth-help">Forgot your password? Run <strong>npm run reset-password</strong> in the Vitalise folder.</p></section></main>';
 }
 async function request(path,body){
  const res=await fetch(path,body===undefined?{}:{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
@@ -152,7 +152,7 @@ function openDialog(kind,info={}){
  if(kind==='channel-edit'){title='Edit '+info.channel+' handle';content=form(kind,hidden('channel',info.channel)+field('Handle','value',l.channels[info.channel]||''));}
  if(kind==='suppress'){title='Add do-not-contact entry';content=form(kind,'<label>Type'+select('kind',['Email','Domain','Phone','LinkedIn','Instagram'],'Email')+'</label>'+field('Address, domain or handle','value','',{required:true})+'<label>Reason'+select('reason',['Added by admin','Opt-out','Bounce','Erasure request'],'Added by admin')+'</label>','Add entry');}
   if(kind==='workspace-add'){/* handled by the 2-step wizard in workspaceWizardHtml() */}
- if(kind==='cookie'){title='Cookie settings';content='<p>Outreach Desk stores workspace and preference data on this computer.</p><div class="flex row-gap">'+btn('Necessary only','cookie','',{'data-value':'necessary'})+btn('Accept','cookie','primary',{'data-value':'accepted'})+'</div>';}
+ if(kind==='cookie'){title='Cookie settings';content='<p>Vitalise stores workspace and preference data on this computer.</p><div class="flex row-gap">'+btn('Necessary only','cookie','',{'data-value':'necessary'})+btn('Accept','cookie','primary',{'data-value':'accepted'})+'</div>';}
  if(kind==='password-change'){title='Change password';content=form(kind,field('Current password','currentPassword','',{type:'password',autocomplete:'current-password',required:true})+field('New password','newPassword','',{type:'password',autocomplete:'new-password',minlength:10,required:true})+field('Confirm new password','confirmPassword','',{type:'password',autocomplete:'new-password',minlength:10,required:true})+'<p class="small muted">Use at least 10 characters.</p>','Change password');}
  if(kind==='erase'){title='Erase personal data';content='<p>Clear contacts, outreach handles, notes, drafts, the brief and enrichment findings from '+e(l.name)+'. The company remains on the list. Suppress the removed handles to prevent future outreach.</p>'+form('erase',field('Type ERASE to confirm','confirm','',{required:true,pattern:'ERASE'}),'Erase personal data');}
  if(kind==='enrich-record'){title='Record enrichment findings';content=form(kind,field('Source URL','source','',{type:'url',required:true})+area('Findings','description','',{required:true}),'Save findings');}
@@ -226,10 +226,10 @@ function workspaceWizardHtml(){
  const w=ui.wsWizard,step=w.step||1;
  const host=(location.host||'localhost')+'/';
   const bullets=['Group projects, leads and outreach in one place','Invite teammates as Agents or Admins','Time zone sets when daily worklists build','API keys and limits stay inside the workspace'];
-  const left='<div class="wizard-left"><div class="wizard-brand"><span class="logo"><img class="logo-img" src="/icon-192.png" alt="" width="28" height="28"></span><div><span class="wizard-brand-name">Outreach Desk</span><span class="wizard-brand-tag">One desk for outreach, leads and research.</span></div></div>'+
+  const left='<div class="wizard-left"><div class="wizard-brand"><span class="logo"><img class="logo-img" src="/icon-192.png" alt="" width="28" height="28"></span><div><span class="wizard-brand-name">Vitalise</span><span class="wizard-brand-tag">One desk for outreach, leads and research.</span></div></div>'+
    '<div class="wizard-left-body"><h2>Set up a new workspace</h2><p>A workspace holds your projects, people, leads and research. Name it after your company or team, then invite the people who will work the lists.</p>'+
    '<ul class="wizard-bullets">'+bullets.map(b=>'<li><span class="wizard-bullet-ck">'+icon('check')+'</span><span>'+e(b)+'</span></li>').join('')+'</ul></div>'+
-   '<div class="wizard-foot">© 2026 Outreach Desk</div></div>';
+   '<div class="wizard-foot">© 2026 Vitalise</div></div>';
    const track='<div class="wizard-track"><i class="on"></i><i class="'+(step>=2?'on':'')+'"></i></div>';
    const progress=step<3?'<div class="wizard-progress">'+track+'<span>Step '+step+' of 2</span></div>':'';
    let right='';
@@ -636,7 +636,7 @@ try{
   if(!location.hash)history.replaceState(null,'',workspace().projects[0]?go('today',workspace().projects[0].id):go('home'));
   render({keepScroll:false});
  }else app.innerHTML=loginPage();
-}catch(error){app.textContent='Outreach Desk could not open. '+error.message;}
+}catch(error){app.textContent='Vitalise could not open. '+error.message;}
 window.addEventListener('error',event=>{notify(event.message||'Something went wrong.',true);});
 window.addEventListener('unhandledrejection',event=>{notify(event.reason?.message||'Something went wrong. Reload if it continues.',true);});
 

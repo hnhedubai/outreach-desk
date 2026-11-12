@@ -92,7 +92,7 @@ export async function scoreWithJev(input){
  if(!input||Array.isArray(input)||Array.isArray(input.leads)||Array.isArray(input.records)){
   throw error(400,'Jev accepts exactly one lead record per request.');
  }
-  if(!jevAvailable())throw error(503,'Set TYPESAFE_API_KEY in the local Outreach Desk environment to score with Jev.');
+  if(!jevAvailable())throw error(503,'Set TYPESAFE_API_KEY in the local Vitalise environment to score with Jev.');
   const body = JSON.stringify(input.request);
   if(Buffer.byteLength(body)>40000)throw error(422,'The saved fit evidence is too large for one Jev assessment.');
   let response;

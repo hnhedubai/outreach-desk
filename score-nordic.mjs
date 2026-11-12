@@ -6,7 +6,7 @@ import {jevInput,scoreWithJev} from './jev.mjs';
 const root=dirname(fileURLToPath(import.meta.url));
 const store=await openStore({dataDir:join(root,'data')});
 const current=await store.getState();
-if(!current)throw Error('Outreach Desk state is unavailable.');
+if(!current)throw Error('Vitalise state is unavailable.');
 const state={...JSON.parse(current.document),revision:current.revision};
 const ws=state.workspaces.find(x=>x.id==='grynh2');
 const project=ws?.projects.find(x=>x.name==='Nordic Hydrogen Production (10–20 MW)');
