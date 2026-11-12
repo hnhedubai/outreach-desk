@@ -1,11 +1,32 @@
-import {e,go,link,btn,header,card,empty,table,tr,blankRow,form,field,area,check,select,tabs,stat,bar,note,date,day,money,todayRows} from './ui.js';
+import {e,go,link,btn,header,card,empty,table,tr,blankRow,form,field,area,check,select,tabs,stat,bar,note,date,day,money,todayRows,icon} from './ui.js';
 const settingsTabs=[['General','settings'],['Team','team'],['Do-not-contact','dnc'],['Usage & limits','usage'],['Audit export','audit']];
 const zones=['Asia/Dubai','Europe/London','Europe/Madrid','Europe/Warsaw','Europe/Berlin','America/New_York','America/Chicago','America/Los_Angeles','Asia/Singapore','Africa/Nairobi','UTC'];
 const zoneField=current=>'<label>Time zone'+select('timezone',[...new Set([current,...zones])],current)+'</label>';
 const memberAvatar=m=>'<span class="avatar">'+e(m.name.slice(0,1).toUpperCase())+'</span>';
+function onboardingHome(ws){
+ const projectDone=ws.projects.length>0, leadsDone=ws.projects.some(p=>p.leads.length>0), teamDone=ws.members.length>1;
+ const steps=[
+  {label:'Create workspace',sub:'Name, URL and settings',done:true},
+  {label:'Create your first project',sub:'Who you sell to, and where',done:projectDone,href:go('new')},
+  {label:'Import leads',sub:'CSV or paste a list',done:leadsDone,href:projectDone?go('import',ws.projects[0].id):null},
+  {label:'Invite your team',sub:'Assign leads to agents',done:teamDone,href:go('team')}
+ ];
+ const doneCount=steps.filter(s=>s.done).length, current=steps.findIndex(s=>!s.done);
+ const checklist='<div class="onboard-checklist"><div class="onboard-checklist-head"><strong>Get started</strong><span class="count muted">'+doneCount+'/4</span></div><ol class="onboard-steps">'+
+  steps.map((s,i)=>'<li class="'+(s.done?'done':i===current?'current':'')+'">'+(s.done?'<span class="onboard-ck ok">'+icon('check')+'</span>':'<span class="onboard-ck">'+(i+1)+'</span>')+
+   '<div class="onboard-step-text"><strong>'+e(s.label)+'</strong><small class="muted">'+e(s.sub)+'</small></div>'+
+   (s.done?'<span class="onboard-step-tag">Done</span>':(i===current&&s.href?'<a class="onboard-step-cta" href="'+e(s.href)+'">Continue →</a>':''))+
+  '</li>').join('')+'</ol></div>';
+ const chooser='<div class="onboard-chooser">'+
+  card('No — find leads for me','<p>Describe the companies you want and review the results before anything runs.</p><div class="row-gap">'+btn('Start searching →','onboard-start','primary',{'data-value':'find'})+'</div>')+
+  card('Yes — I have a list','<p>Create the project, then upload an Excel or CSV file or paste domains.</p><div class="row-gap">'+btn('Create project →','onboard-start','',{'data-value':'import'})+'</div>')+'</div>';
+ return header('Welcome to '+e(ws.name),'Either path creates a project with its own list, targeting and channels.',link('+ Create first project',go('new'),'btn primary'))+
+  '<div class="onboard-grid">'+checklist+'<div class="onboard-main"><h2 class="onboard-q">Do you already have leads?</h2><p class="onboard-intro">Either way you end up with a project: what you offer, who it’s for, and a list we turn into who to contact today — per channel, per person.</p>'+chooser+'</div></div>';
+}
 export function workspacePage(page,ws,ui,state,{webSearch,firecrawlAvailable,jevAvailable,perplexityAvailable,limaAvailable}={}){
  const member=ws.members[0];
  if(page==='home'){
+  if(!ws.projects.length)return onboardingHome(ws);
   const leads=ws.projects.flatMap(p=>p.leads), todays=ws.projects.flatMap(p=>todayRows(ws,p)), all=ws.projects.flatMap(p=>p.assignments);
   const replied=all.filter(a=>a.marks.includes('Replied')).length, attempts=all.filter(a=>a.marks.includes('Attempted')).length;
   return header(e(ws.name),'Workspace dashboard',link('Analytics →',ws.projects[0]?go('analytics',ws.projects[0].id):go('usage'))+link('New project',go('new'),'btn primary'))+
