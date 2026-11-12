@@ -38,7 +38,7 @@ p{line-height:1.5}
 .nav-item.sub{font-weight:500;padding-left:40px}
 .nav-item svg{color:var(--muted);flex-shrink:0}
 .nav-label{font-size:11px;letter-spacing:.055em;color:var(--muted);padding:16px 12px 8px;text-transform:uppercase;font-weight:700}
-.project-icon{display:grid;place-items:center;height:20px;width:20px;background:#a05ba9;color:#fff;border-radius:5px;font-size:11px}
+.project-icon{display:grid;place-items:center;height:20px;width:20px;background:var(--accent);color:#fff;border-radius:6px;font-size:11px;font-weight:600}
 .nav-badge{margin-left:auto;font-size:11px;color:var(--muted)}
 .account{display:flex;align-items:center;gap:12px;padding:15px 19px;border:0;border-top:1px solid var(--line);background:var(--paper);text-align:left;min-height:73px}
 .account .dots{margin-left:auto}
