@@ -22,8 +22,12 @@ const SPECIFIC=[
   ['VP',    /\bvice president\b|\bvp\b/i],
   ['DIR',   /\bdirector\b/i],
   ['HEAD',  /\bhead of\b|\bhead,\s|\bhead\s+\w+\s+of\b/i],
+  ['PM',    /\bproject manager\b/i],
   ['BDM',   /\bbusiness development manager\b|\bbdm\b|\bbd (?:manager|lead|director)\b/i],
 ];
+
+// function-qualifier abbreviations (extend as needed)
+const FUNC_ABBREV={ 'project management':'PM' };
 
 const trim=s=>(s||'').replace(/\s+/g,' ').trim();
 
@@ -53,7 +57,8 @@ export function normalizeDesignation(raw){
     const generic=t.match(/chief\s+.+?\s+officer/i);
     if(generic) code='CXO';
   }
-  const fn=functionOf(t, code);
+  let fn=functionOf(t, code);
+  if(FUNC_ABBREV[fn.toLowerCase()]) fn=FUNC_ABBREV[fn.toLowerCase()];
   const label = (code==='OTHER'||!fn) ? code : `${code} · ${fn}`;
   return {code, label, raw:t};
 }
