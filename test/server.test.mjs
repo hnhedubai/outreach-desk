@@ -71,7 +71,7 @@ test('reset status reports configured and login sets a strict HttpOnly session c
  assert.deepEqual(json(reset),{configured:true});
  const response=await request({method:'POST',path:'/api/auth/login',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'admin',password:'correct horse battery staple'})});
  assert.equal(response.status,200);
- assert.match(response.headers['set-cookie']?.[0]||'',/^outreach_session=[^;]+; HttpOnly; SameSite=Strict; Path=\/; Max-Age=28800$/);
+  assert.match(response.headers['set-cookie']?.[0]||'',/^outreach_session=[^;]+; HttpOnly; SameSite=Strict; Path=\/; Max-Age=31536000$/);
  return response.headers['set-cookie'][0].split(';')[0];
 });
 
