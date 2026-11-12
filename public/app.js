@@ -376,6 +376,7 @@ async function onClick(event){
    if(type==='ws-invite-another'){const w=ui.wsWizard||{};w.invites=collectInviteRows();w.invites.push({email:'',role:'Agent'});openDialog('workspace-add');return;}
    if(type==='ws-invite-remove'){const w=ui.wsWizard||{};w.invites=collectInviteRows();w.invites.splice(Number(d.index),1);if(!w.invites.length)w.invites=[{email:'',role:'Agent'}];openDialog('workspace-add');return;}
    if(type==='ws-skip'){await createWorkspaceFromWizard([]);return;}
+   if(type==='onboard-start'){ui.newMode=d.value;location.hash=go('new');return;}
  if(type==='worklist'){await action(type,{replace:d.replace==='true'},{message:d.replace==='true'?'Worklist regenerated.':'Worklist topped up.'});return;}
  if(type==='mark'||type==='lead-mark'){await action(type,{assignment:d.id,channel:d.channel,mark:d.mark},{message:d.mark+' recorded.'});return;}
  if(type==='fit'){await action(type,{value:d.value==='true'});return;}
