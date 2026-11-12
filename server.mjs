@@ -8,7 +8,7 @@ import {createState,perform,cleanDomain,runDaily,reconcileAssignments,recordJevF
 import {currentJevFit,jevAvailable,jevInput,scoreWithJev} from './jev.mjs';
 import {firecrawlAvailable,firecrawlSearch} from './firecrawl.mjs';
 import {perplexityAvailable,perplexitySearch,limaAvailable,findLimaEmail} from './research-providers.mjs';
-import {authUsername,clearSessions,createSession,destroySession,ensureAuth,initSessions,readAuth,sessionFrom,setPassword,verifyPassword} from './auth.mjs';
+import {authUsername,clearSessions,createSession,destroySession,ensureAuth,ensureAdminPassword,initSessions,readAuth,sessionFrom,setPassword,verifyPassword} from './auth.mjs';
 export function classifyStreamError(error,req){
  if(error&&error.status)return {status:error.status,message:error.message};
  if(req?.destroyed||req?.aborted||['ERR_STREAM_PREMATURE_CLOSE','ECONNRESET','EPIPE','ABORTED'].includes(error?.code))
@@ -36,7 +36,8 @@ export async function createApp({db:providedDb,dataDir:providedDataDir,port:requ
  await mkdir(dataDir,{recursive:true});
  initSessions(dataDir);
  const store=await openStore({providedDb,dataDir});
-const auth=await ensureAuth(dataDir);
+ const auth=await ensureAuth(dataDir);
+ await ensureAdminPassword(dataDir,process.env.OUTREACH_ADMIN_PASSWORD);
 await store.seed(JSON.stringify(createState()));
 const read=async()=>{
  const row=await store.getState();

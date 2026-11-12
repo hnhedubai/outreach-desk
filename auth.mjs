@@ -60,6 +60,18 @@ export async function setPassword(dataDir,password){
  await writeFile(temp,JSON.stringify({username,...storedHash(password)},null,2),{encoding:'utf8'});
  await rename(temp,passwordFile(dataDir));
 }
+// Seed the admin password from an environment-supplied value when none is configured
+// yet. An ephemeral host (Render) wipes auth.json on every redeploy, so without this
+// login would return 401 forever until someone ran reset-password.mjs by hand. The
+// password stays scrypt-hashed via setPassword; the value is passed in, not read here,
+// so this stays pure and testable. Returns true only when it actually wrote a password.
+export async function ensureAdminPassword(dataDir,password){
+ if(typeof password!=='string'||password.length===0)return false;
+ const saved=await readAuth(dataDir);
+ if(saved?.salt&&saved.hash)return false;
+ await setPassword(dataDir,password);
+ return true;
+}
 export function createSession(){
  const token=randomBytes(32).toString('base64url');
  sessions.set(token,Date.now()+SESSION_MS);
