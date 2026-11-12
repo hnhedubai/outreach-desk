@@ -296,10 +296,10 @@ fieldset{border:0;padding:0;margin:0;min-width:0}
 @media(max-width:520px){.auth-card{padding:28px 22px}}
 
 /* Add-workspace wizard — split-screen dialog matching the Kitfox design system (2-step + ready screen). Scoped to dialog.wizard; reuses the --kf palette tokens. */
-dialog.wizard{--accent:#e85d26;--accent-dark:#c9491a;width:min(1000px,calc(100vw - 32px));padding:0;border-radius:16px;overflow:hidden;max-height:calc(100vh - 48px)}
-dialog.wizard::backdrop{background:#1a1a1a66}
+dialog.wizard{--accent:#e85d26;--accent-dark:#c9491a;position:fixed;inset:0;margin:0;width:100vw;height:100vh;max-width:none;max-height:none;padding:0;border:0;border-radius:0;overflow:hidden}
+dialog.wizard::backdrop{background:transparent}
 dialog.wizard .btn.primary:hover{background:var(--accent-dark)}
-.wizard-body{display:grid;grid-template-columns:minmax(0,40%) minmax(0,60%);min-height:520px}
+.wizard-body{display:grid;grid-template-columns:minmax(0,40%) minmax(0,60%);min-height:100vh}
 .wizard-left{background:#1a1a1a;color:#f5efe6;padding:32px 30px;display:flex;flex-direction:column}
 .wizard-brand{display:flex;align-items:center;gap:12px}
 .wizard-brand .logo{width:30px;height:30px;border-radius:8px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
@@ -352,4 +352,4 @@ dialog.wizard .btn.primary:hover{background:var(--accent-dark)}
 .wizard-success .wizard-sub{max-width:360px}
 .wizard-success .btn{margin-top:6px}
 .wizard-success .btn.primary{width:100%;justify-content:center}
-@media(max-width:720px){dialog.wizard{width:calc(100vw - 16px)}.wizard-body{grid-template-columns:1fr;min-height:0}.wizard-left{display:none}.wizard-right{padding:22px}}
+@media(max-width:720px){.wizard-body{grid-template-columns:1fr}.wizard-left{display:none}.wizard-right{padding:22px}}
