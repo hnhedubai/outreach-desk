@@ -104,7 +104,8 @@ tr[data-open]:hover{background:var(--peach);cursor:pointer}
 td .subline{display:block;color:var(--muted);font-size:12px;margin-top:2px;line-height:1.3;overflow-wrap:anywhere}
 .table-name{font-size:14px;font-weight:670}
 .domain-tick{color:var(--green);font-weight:700;margin-left:5px;font-size:12px}
-.vstat{width:12px;height:12px;vertical-align:-1px;margin-right:5px;display:inline-block;flex:none}
+.vstat-wrap{display:inline-flex;align-items:center;margin-right:5px}
+.vstat{width:12px;height:12px;display:inline-block;flex:none}
 .vstat-ok{color:var(--green)}.vstat-ca{color:var(--warning)}.vstat-bad{color:var(--danger)}.vstat-none{color:var(--soft)}
 .li-icon{width:16px;height:16px;vertical-align:-3px;display:inline-block;flex:none}
 .td-actions{white-space:nowrap}
