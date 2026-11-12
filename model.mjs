@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 
 import {contactAllowed,handleKey,isSuppressed,suppressionKind} from './public/eligibility.js';
+import {normalizeDesignation} from './designation.mjs';
 
 export const CHANNELS=['Call','Email','Instagram','LinkedIn','SMS','WhatsApp'];
 export const MARKS=['Attempted','Replied','Opt-out','Bounce','Invalid handle'];
@@ -57,7 +58,8 @@ export function cleanHandle(channel,value){
   }catch{return '';}
 }
 function newContact(input){
-  return {id:id(),name:tidy(input.name,140),title:tidy(input.title,160),email:normalizeEmail(input.email),linkedin:cleanHandle('LinkedIn',input.linkedin),source:tidy(input.source,350)};
+  const title=tidy(input.title,160);
+  return {id:id(),name:tidy(input.name,140),title,designation:normalizeDesignation(title).label,email:normalizeEmail(input.email),linkedin:cleanHandle('LinkedIn',input.linkedin),source:tidy(input.source,350)};
 }
 const companyProfileLimits={city:100,platform:100,leadSource:140};
 function cleanFitReview(review){
