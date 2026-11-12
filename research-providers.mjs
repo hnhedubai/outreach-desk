@@ -2,9 +2,12 @@ import {cleanDomain,normalizeEmail} from './model.mjs';
 
 export const perplexityAvailable = () => Boolean(process.env.PERPLEXITY_API_KEY?.trim());
 export const limaAvailable = () => Boolean(process.env.LIMADATA_API_KEY?.trim());
+export const reoonAvailable = () => Boolean(process.env.REOON_API_KEY?.trim());
 const failure = (status,message) => Object.assign(new Error(message),{status});
 const limaBase = 'https://api.limadata.com/api/v1';
+const reoonBase = 'https://emailverifier.reoon.com/api/v1';
 const LIMA_EMAIL_LOOKUP_COST = 4; // credits per find/email_work lookup
+const REOON_VERIFY_COST = 1;      // credits per POWER verification (confirmed 2026-11-12)
 let limaBusy = false;
 
 async function providerRequest(provider,url,headers,body){
@@ -92,4 +95,38 @@ export async function findLimaEmail(name,domain){
     const result = await providerJson('LimaData',response);
     return classifyLimaResult(result,domain);
   }finally{limaBusy=false;}
+}
+
+// Reoon POWER status → our coarse outcome. The raw `status` is what we persist and
+// what the contacts badge renders (it already understands safe/catch_all/invalid/…).
+const REOON_INVALID=new Set(['invalid','disabled','spamtrap','disposable','inbox_full','role_account']);
+export function classifyReoonResult(result){
+  if(!result||typeof result!=='object'||typeof result.status!=='string')throw failure(502,'Reoon returned an invalid verification response.');
+  const status=result.status.toLowerCase();
+  const score=Number.isFinite(result.overall_score)?result.overall_score:null;
+  const safeToSend=result.is_safe_to_send===true;
+  let outcome='unknown';
+  if(status==='safe')outcome='valid';
+  else if(status==='catch_all')outcome='catchall';
+  else if(REOON_INVALID.has(status))outcome='invalid';
+  return {outcome,status,score,safeToSend,message:providerMessage(result.message)||('Reoon: '+status)};
+}
+
+// Read the two credit pools once, so a batch can be gated before any /verify is spent.
+export async function reoonBalance(){
+  const key = process.env.REOON_API_KEY?.trim();
+  if(!key)throw failure(503,'Set REOON_API_KEY in the local server environment to enable Reoon.');
+  const data = await providerJson('Reoon',await providerRequest('Reoon',reoonBase+'/check-account-balance/?key='+encodeURIComponent(key),{}));
+  const daily=Number(data.remaining_daily_credits),instant=Number(data.remaining_instant_credits);
+  if(!Number.isFinite(daily)||!Number.isFinite(instant))throw failure(502,'Reoon did not provide a readable credit balance.');
+  return {daily,instant,total:daily+instant};
+}
+
+// Single POWER verification. Key travels as a query param (not a header, unlike LimaData).
+// The caller gates credits; this does the one request and classifies it.
+export async function verifyReoonEmail(email){
+  const key = process.env.REOON_API_KEY?.trim();
+  if(!key)throw failure(503,'Set REOON_API_KEY in the local server environment to enable Reoon.');
+  const response = await providerRequest('Reoon',reoonBase+'/verify?email='+encodeURIComponent(email)+'&key='+encodeURIComponent(key)+'&mode=power',{});
+  return classifyReoonResult(await providerJson('Reoon',response));
 }

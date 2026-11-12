@@ -17,23 +17,25 @@ export function enforceTlsVerification(){
  return wasDisabled;
 }
 
-const SQLITE_SCHEMA='PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS workspace_state(id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL, document TEXT NOT NULL)';
-const PG_SCHEMA='CREATE TABLE IF NOT EXISTS workspace_state(id integer PRIMARY KEY CHECK(id=1), revision integer NOT NULL, document text NOT NULL)';
+const SQLITE_SCHEMA='PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS workspace_state(id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL, document TEXT NOT NULL); CREATE TABLE IF NOT EXISTS verification_audit(id INTEGER PRIMARY KEY AUTOINCREMENT, workspace TEXT, project TEXT, lead TEXT, contact TEXT, email TEXT, status TEXT, score INTEGER, safe_to_send INTEGER, source TEXT, verified_at TEXT NOT NULL)';
+const PG_SCHEMA='CREATE TABLE IF NOT EXISTS workspace_state(id integer PRIMARY KEY CHECK(id=1), revision integer NOT NULL, document text NOT NULL); CREATE TABLE IF NOT EXISTS verification_audit(id bigserial PRIMARY KEY, workspace text, project text, lead text, contact text, email text, status text, score integer, safe_to_send boolean, source text, verified_at timestamptz NOT NULL DEFAULT now()); CREATE OR REPLACE FUNCTION record_verification(p_workspace text, p_project text, p_lead text, p_contact text, p_email text, p_status text, p_score integer, p_safe boolean, p_source text) RETURNS void AS $$ BEGIN INSERT INTO verification_audit(workspace,project,lead,contact,email,status,score,safe_to_send,source) VALUES (p_workspace,p_project,p_lead,p_contact,p_email,p_status,p_score,p_safe,p_source); END $$ LANGUAGE plpgsql';
 
 function openSqlite(providedDb,dataDir){
  const ownsDb=!providedDb;
  const db=providedDb||new DatabaseSync(join(dataDir,'outreach.sqlite'));
  db.exec(SQLITE_SCHEMA);
- const get=db.prepare('SELECT revision,document FROM workspace_state WHERE id=1');
- const ins=db.prepare('INSERT OR IGNORE INTO workspace_state VALUES (1,0,?)');
- const upd=db.prepare('UPDATE workspace_state SET revision=?,document=? WHERE id=1 AND revision=?');
- return {
-  backend:'sqlite',
-  async getState(){const r=get.get();return r?{revision:r.revision,document:r.document}:null;},
-  async seed(document){ins.run(document);},
-  async save(revision,document,expectedRevision){return upd.run(revision,document,expectedRevision).changes===1;},
-  async close(){if(ownsDb)db.close();},
- };
+  const get=db.prepare('SELECT revision,document FROM workspace_state WHERE id=1');
+  const ins=db.prepare('INSERT OR IGNORE INTO workspace_state VALUES (1,0,?)');
+  const upd=db.prepare('UPDATE workspace_state SET revision=?,document=? WHERE id=1 AND revision=?');
+  const insAudit=db.prepare('INSERT INTO verification_audit(workspace,project,lead,contact,email,status,score,safe_to_send,source,verified_at) VALUES (?,?,?,?,?,?,?,?,?,?)');
+  return {
+   backend:'sqlite',
+   async getState(){const r=get.get();return r?{revision:r.revision,document:r.document}:null;},
+   async seed(document){ins.run(document);},
+   async save(revision,document,expectedRevision){return upd.run(revision,document,expectedRevision).changes===1;},
+   async recordVerification(v){insAudit.run(v.workspace,v.project,v.lead,v.contact,v.email,v.status,v.score??null,v.safeToSend?1:0,v.source,new Date().toISOString());},
+   async close(){if(ownsDb)db.close();},
+  };
 }
 
 // Neon/Postgres resilience. A transient fault is a connection-layer failure (cold wake,
@@ -86,7 +88,8 @@ async function openPostgres(url){
   backend:'postgres',
   async getState(){const r=await run('SELECT revision,document FROM workspace_state WHERE id=1');return r.rows[0]?{revision:r.rows[0].revision,document:r.rows[0].document}:null;},
   async seed(document){await run('INSERT INTO workspace_state(id,revision,document) VALUES (1,0,$1) ON CONFLICT (id) DO NOTHING',[document]);},
-  async save(revision,document,expectedRevision){const r=await run('UPDATE workspace_state SET revision=$1,document=$2 WHERE id=1 AND revision=$3',[revision,document,expectedRevision]);return r.rowCount===1;},
+   async save(revision,document,expectedRevision){const r=await run('UPDATE workspace_state SET revision=$1,document=$2 WHERE id=1 AND revision=$3',[revision,document,expectedRevision]);return r.rowCount===1;},
+   async recordVerification(v){await run('SELECT record_verification($1,$2,$3,$4,$5,$6,$7,$8,$9)',[v.workspace,v.project,v.lead,v.contact,v.email,v.status,v.score??null,v.safeToSend===true,v.source]);},
   // Bound shutdown so a connection stuck mid-wake cannot hang process exit.
   async close(){await Promise.race([pool.end(),sleep(10_000)]);},
  };

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {classifyLimaResult,findLimaEmail,perplexitySearch} from '../research-providers.mjs';
+import {classifyLimaResult,findLimaEmail,perplexitySearch,classifyReoonResult} from '../research-providers.mjs';
 import {firecrawlSearch} from '../firecrawl.mjs';
 
 test('classifyLimaResult distinguishes a matching work email',()=>{
@@ -23,6 +23,35 @@ test('classifyLimaResult rejects an email from another domain',()=>{
 
 test('classifyLimaResult rejects malformed provider data',()=>{
   assert.throws(()=>classifyLimaResult(null,'example.com'),/invalid response/);
+});
+
+test('classifyReoonResult maps safe to valid and keeps the raw status',()=>{
+  assert.deepEqual(classifyReoonResult({status:'safe',overall_score:98,is_safe_to_send:true}),
+    {outcome:'valid',status:'safe',score:98,safeToSend:true,message:'Reoon: safe'});
+});
+
+test('classifyReoonResult flags catch-all as send-with-caution',()=>{
+  const r=classifyReoonResult({status:'catch_all',overall_score:70,is_safe_to_send:false});
+  assert.equal(r.outcome,'catchall');assert.equal(r.status,'catch_all');assert.equal(r.safeToSend,false);
+});
+
+test('classifyReoonResult collapses the invalid family to invalid',()=>{
+  for(const status of ['invalid','disabled','spamtrap','disposable','inbox_full','role_account']){
+    assert.equal(classifyReoonResult({status,is_safe_to_send:false}).outcome,'invalid',status);
+  }
+});
+
+test('classifyReoonResult treats unknown as unknown',()=>{
+  assert.equal(classifyReoonResult({status:'unknown'}).outcome,'unknown');
+});
+
+test('classifyReoonResult tolerates null booleans and extra fields',()=>{
+  const r=classifyReoonResult({status:'safe',is_disposable:null,is_forwarded:false,overall_score:98,is_safe_to_send:true,verification_mode:'power'});
+  assert.equal(r.outcome,'valid');assert.equal(r.score,98);
+});
+
+test('classifyReoonResult rejects a response without a status',()=>{
+  assert.throws(()=>classifyReoonResult({email:'a@b.com'}),/invalid verification response/);
 });
 
 test('findLimaEmail gates the full four-credit lookup cost',async()=>{

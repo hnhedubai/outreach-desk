@@ -5,7 +5,7 @@ import {leadPage,newProjectPage,findPage,importPage,leadFields,personFields} fro
 import {parseCsv,parseWorkbook} from './spreadsheet.js';
 
 const app=document.querySelector('#app'),dialog=document.querySelector('#dialog'),toast=document.querySelector('#toast');
-let state,authenticated=false,webSearch=false,jevAvailable=false,firecrawlAvailable=false,perplexityAvailable=false,limaAvailable=false,ui={},menu='',busy=false,noticeTimer;
+let state,authenticated=false,webSearch=false,jevAvailable=false,firecrawlAvailable=false,perplexityAvailable=false,limaAvailable=false,reoonAvailable=false,ui={},menu='',busy=false,noticeTimer;
 const workspace=()=>state.workspaces.find(x=>x.id===state.active)||state.workspaces[0];
 function route(){
  const parts=location.hash.slice(1).split('/').filter(Boolean).map(x=>{try{return decodeURIComponent(x);}catch{return x;}});
@@ -67,7 +67,7 @@ function render({keepScroll=true,restoreInput}={}){
   const previous=app.querySelector('.main')?.scrollTop||0,side=app.querySelector('.nav-scroll')?.scrollTop||0;
   let content='';
   if(r.badProject)content=header('Project unavailable','Choose a project from the sidebar.');
-  else if(r.page==='lead')content=r.lead?leadPage(r.ws,r.p,r.lead,r.tab,ui,{jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable}):header('Lead unavailable');
+   else if(r.page==='lead')content=r.lead?leadPage(r.ws,r.p,r.lead,r.tab,ui,{jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable}):header('Lead unavailable');
   else if(r.page==='find'||r.page==='import'){
    content=!r.p?header('Page unavailable','Choose a project from the sidebar.'):
     r.page==='find'?findPage(r.ws,r.p,ui,{webSearch,firecrawlAvailable,perplexityAvailable}):importPage(r.ws,r.p,ui);
@@ -107,7 +107,7 @@ async function request(path,body){
  if(!res.ok)throw Object.assign(new Error(data.error||'Request failed.'),{status:res.status});
  return data;
 }
-async function refresh(){({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable}=await request('/api/state'));}
+async function refresh(){({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable}=await request('/api/state'));}
 async function action(type,input={},options={}){
  if(busy)return;
  const r=route();busy=true;
@@ -115,7 +115,7 @@ async function action(type,input={},options={}){
   const context=options.context||{workspace:r.ws.id,project:r.p?.id,lead:r.lead?.id};
   const payload={...context,...input};
   const out=await request('/api/action',{type,input:payload,revision:options.revision??state.revision});
-  ({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable}=out);
+   ({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable}=out);
   if(dialog.open&&!options.context)dialog.close();
   if(options.after)options.after(out.result);
   render();
@@ -456,11 +456,29 @@ async function onClick(event){
    if(href!==location.hash||view!==ui)return;
    if(result.outcome==='match'&&result.email)openDialog('lima-review',result);
    else notify(result.message||'LimaData returned no usable work email.',true);
-  }catch(error){notify(error.message,true);}
-  finally{button.disabled=false;busy=false;}
-  return;
- }
- if(type==='analyze-site'||type==='enrich-web'){
+   }catch(error){notify(error.message,true);}
+   finally{button.disabled=false;busy=false;}
+   return;
+  }
+  if(type==='verify-email'||type==='verify-account'){
+   if(busy||!reoonAvailable||!l||l.erasedAt)return;
+   const href=location.hash,view=ui;
+   button.disabled=true;busy=true;
+   try{
+    const body={workspace:r.ws.id,project:p.id,lead:l.id,revision:state.revision};
+    if(type==='verify-email')body.contact=d.id;
+    const out=await request('/api/verify-emails',body);
+    if(href!==location.hash||view!==ui)return;
+    ({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable}=out);
+    render();
+    const res=out.result||{};
+    if(res.verified)notify(res.verified+(res.verified===1?' email verified.':' emails verified.'));
+    else notify('Reoon returned no usable result.',true);
+   }catch(error){notify(error.message,true);}
+   finally{button.disabled=false;busy=false;}
+   return;
+  }
+  if(type==='analyze-site'||type==='enrich-web'){
   if(!webSearch){notify('Set EXA_API_KEY on the local server to enable web research.',true);return;}
   const form=button.closest('form');
   const domain=type==='analyze-site'?String(values(form).website||'').replace(/^https?:\/\//,'').split('/')[0].toLowerCase().replace(/^www\./,''):l.domain;

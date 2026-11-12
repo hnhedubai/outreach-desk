@@ -469,7 +469,7 @@ export function perform(state,type,input={}){
     const c=newContact(input);if(!c.name)invalid('Enter a contact name.');
     if(type==='contact-edit'){
       const existing=byId(l.contacts,input.contact,'Contact unavailable.');
-      if(existing.email!==c.email)delete existing.emailSource;
+      if(existing.email!==c.email){delete existing.emailSource;delete existing.emailVerified;delete existing.verifiedAt;delete existing.verifySource;}
       Object.assign(existing,{...c,id:input.contact});
     }
     else l.contacts.push(c);
@@ -482,6 +482,20 @@ export function perform(state,type,input={}){
     if(!email||(domain!==l.domain&&!domain.endsWith('.'+l.domain)))invalid('The email does not match the company domain.');
     contact.email=email;
     contact.emailSource='LimaData';
+  }else if(type==='record-verification'){
+    const allowed=new Set(['safe','catch_all','invalid','disabled','spamtrap','disposable','inbox_full','role_account','unknown']);
+    const results=Array.isArray(input.results)?input.results:[];
+    if(!results.length)invalid('No verification results supplied.');
+    if(results.length>200)invalid('Too many verification results in one action.');
+    const at=now();
+    for(const r of results){
+      if(!isRecord(r)||typeof r.status!=='string')invalid('Each verification result needs a status.');
+      const status=r.status.toLowerCase();
+      if(!allowed.has(status))continue;             // ignore anything Reoon did not return as a known status
+      const contact=byId(l.contacts,r.contact,'Contact unavailable.');
+      if(!contact.email)invalid('A verified contact must have an email.');
+      contact.emailVerified=status;contact.verifySource='Reoon';contact.verifiedAt=at;
+    }
   }else if(type==='note'){
     const text=tidy(input.text,8000);if(!text)invalid('Enter a note.');
     l.notes.unshift({id:id(),text,channel:tidy(input.channel,30)||'General',at:now(),author:ws.members[0].name});

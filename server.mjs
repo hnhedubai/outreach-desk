@@ -7,7 +7,7 @@ import {enforceTlsVerification,openStore} from './db.mjs';
 import {createState,perform,cleanDomain,runDaily,reconcileAssignments,recordJevFit} from './model.mjs';
 import {currentJevFit,jevAvailable,jevInput,scoreWithJev} from './jev.mjs';
 import {firecrawlAvailable,firecrawlSearch} from './firecrawl.mjs';
-import {perplexityAvailable,perplexitySearch,limaAvailable,findLimaEmail} from './research-providers.mjs';
+import {perplexityAvailable,perplexitySearch,limaAvailable,findLimaEmail,reoonAvailable,verifyReoonEmail,reoonBalance} from './research-providers.mjs';
 import {verifyDomains} from './domain.mjs';
 import {authUsername,clearSessions,createSession,destroySession,ensureAuth,ensureAdminPassword,initSessions,readAuth,sessionFrom,setPassword,verifyPassword} from './auth.mjs';
 export function classifyStreamError(error,req){
@@ -105,8 +105,8 @@ function stateResponse(state,result){
  for(const workspace of state.workspaces)for(const project of workspace.projects)for(const lead of project.leads){
   if(lead.jevFit)lead.jevFit.stale=!currentJevFit(project,lead);
  }
- return {state,result,webSearch:keyAvailable(),jevAvailable:jevAvailable(),firecrawlAvailable:firecrawlAvailable(),
-  perplexityAvailable:perplexityAvailable(),limaAvailable:limaAvailable()};
+  return {state,result,webSearch:keyAvailable(),jevAvailable:jevAvailable(),firecrawlAvailable:firecrawlAvailable(),
+   perplexityAvailable:perplexityAvailable(),limaAvailable:limaAvailable(),reoonAvailable:reoonAvailable()};
 }
 function scoringTarget(state,input){
  const workspace=state.workspaces.find(workspace=>workspace.id===input?.workspace);
@@ -194,8 +194,44 @@ async function lookupContactEmail(state,input){
  const contact=lead?.contacts.find(x=>x.id===input.contact);
  if(!contact)throw requestError(404,'Contact unavailable for lookup.');
  if(contact.email)throw requestError(409,'This contact already has a work email.');
- const result=await findLimaEmail(contact.name,lead.domain);
- return {...result,contact:contact.id,expectedName:contact.name,expectedDomain:lead.domain};
+  const result=await findLimaEmail(contact.name,lead.domain);
+  return {...result,contact:contact.id,expectedName:contact.name,expectedDomain:lead.domain};
+}
+// Verify a lead's contact emails with Reoon POWER. input.contact → one contact; omit it to
+// verify every contact that has an email on the lead. Runs the HTTP here (Neon SQL cannot),
+// gates credits up front, persists the raw status under CAS, then records an audit row each.
+async function verifyContactEmails(input){
+  if(!reoonAvailable())throw requestError(503,'Set REOON_API_KEY to enable Reoon verification.');
+  if(typeof input.workspace!=='string'||typeof input.project!=='string'||typeof input.lead!=='string')throw requestError(400,'Specify workspace, project and lead.');
+  const state=await load();
+  if(input.revision!==undefined&&input.revision!==state.revision)throw requestError(409,'The workspace changed. Refresh and try again.');
+  const ws=state.workspaces.find(x=>x.id===input.workspace);
+  const project=ws?.projects.find(x=>x.id===input.project);
+  const lead=project?.leads.find(x=>x.id===input.lead&&!x.erasedAt);
+  if(!lead)throw requestError(404,'Lead unavailable.');
+  const targets=(input.contact?lead.contacts.filter(c=>c.id===input.contact):lead.contacts).filter(c=>c.email);
+  if(!targets.length)throw requestError(400,'No contact with an email to verify on this lead.');
+  if(targets.length>25)throw requestError(400,'Verify at most 25 emails at a time.');
+  const balance=await reoonBalance();
+  if(balance.total<targets.length)throw requestError(402,`Reoon needs at least ${targets.length} credits; ${balance.total} remain.`);
+  // Reoon allows ≤5 concurrent single verifies; keep a small pool so a batch fits the request timeout.
+  const results=[];const queue=[...targets];
+  await Promise.all(Array.from({length:Math.min(3,queue.length)},async()=>{
+    while(queue.length){
+      const c=queue.shift();
+      try{const r=await verifyReoonEmail(c.email);results.push({contact:c.id,email:c.email,status:r.status,score:r.score,safeToSend:r.safeToSend,outcome:r.outcome});}
+      catch(error){results.push({contact:c.id,email:c.email,status:'unknown',score:null,safeToSend:false,outcome:'error',error:error.message});}
+    }
+  }));
+  const persisted=results.filter(r=>r.outcome!=='error').map(r=>({contact:r.contact,status:r.status}));
+  if(persisted.length)perform(state,'record-verification',{workspace:input.workspace,project:input.project,lead:input.lead,results:persisted});
+  const previous=state.revision;state.revision++;
+  if(!(await store.save(state.revision,encodeState(state),previous)))throw requestError(409,'The workspace changed. Refresh and try again.');
+  for(const r of results){
+    try{await store.recordVerification({workspace:input.workspace,project:input.project,lead:input.lead,contact:r.contact,email:r.email,status:r.status,score:r.score,safeToSend:r.safeToSend,source:'Reoon'});}
+    catch(error){console.error('Verification audit:',error.message);}
+  }
+  return stateResponse(state,{verified:persisted.length,attempted:results.length,results});
 }
 // Verify domains of leads whose MX status is not yet resolved (newly landed, or a
 // prior error). Mutates state in place; returns true if any lead changed. Bounded so
@@ -304,6 +340,11 @@ const server=createServer(async(req,res)=>{
     requirePost(req);
     const input=await body(req);
     send(res,200,await lookupContactEmail(await read(),input));return;
+  }
+  if(u.pathname==='/api/verify-emails'){
+    requirePost(req);
+    const input=await body(req);
+    send(res,200,await verifyContactEmails(input));return;
   }
   if(u.pathname==='/api/audit'&&req.method==='GET'){
     const ws=(await load()).workspaces.find(w=>w.id===u.searchParams.get('workspace'));if(!ws){send(res,404,{error:'Workspace unavailable.'});return;}

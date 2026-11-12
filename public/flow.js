@@ -19,7 +19,7 @@ function fitReview(l,p,timezone,jevAvailable){
  table(['Signal','Status','Evidence summary'],asset.signals.map(signal=>tr([e(signal.label),e(signal.status),e(signal.detail)])))+'</details>').join('');
  return score+'<p class="small muted">Evidence reviewed '+e(l.fitReview.reviewedOn)+' · '+link('View sources',go('lead',p.id,l.id,'enrichment'),'')+'</p>'+sites;
 }
-export function leadPage(ws,p,l,tab,ui,{jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable}={}){
+export function leadPage(ws,p,l,tab,ui,{jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable}={}){
  const items=[['Channels','channels'],['People '+l.contacts.length,'people'],['Notes','notes'],['History','history'],['Drafts','drafts'],['Enrichment','enrichment']];
  const name=link('← Leads',go('leads',p.id),'btn link');
  const actions=btn('Edit details','dialog','',{'data-kind':'lead-edit'})+btn(l.notFit?'Restore fit':'Not a fit for this project','fit','',{'data-value':l.notFit?'false':'true'})+btn('Erase personal data…','dialog','danger',{'data-kind':'erase'});
@@ -50,11 +50,13 @@ export function leadPage(ws,p,l,tab,ui,{jevAvailable,firecrawlAvailable,perplexi
  }
  if(tab==='people'){
   const roles=p.targeting.roles.map(x=>x.toLowerCase());
-  const rows=l.contacts.map(c=>tr(['<strong>'+e(c.name)+'</strong>','<span title="'+e(c.title||'')+'">'+e(c.designation||c.title||'—')+'</span>',c.email?verifyBadge(c.email_verified)+outreachLink(ws,p,l,'Email',c.email,c.email):'—',c.linkedin?(contactAllowed(ws,p,l,'LinkedIn',c.linkedin)?'<a class="accent" href="'+e(c.linkedin)+'" target="_blank" rel="noopener noreferrer" title="Open LinkedIn profile" aria-label="Open LinkedIn profile">'+linkedinIcon()+'</a>':linkedinIcon()+' <span class="pill off">Unavailable for outreach</span>'):'—',c.source?ext(c.source,'Source'):'—',
-    roles.some(r=>((c.designation||'')+' '+(c.title||'')).toLowerCase().includes(r))?'<span class="pill green">Target role</span>':'',
-    btn('Edit','dialog','subtle',{'data-kind':'contact-edit','data-id':c.id})+
-    (limaAvailable&&!l.erasedAt&&!c.email?btn('Find work email','lima-email','subtle',{'data-id':c.id,title:'LimaData lookup · up to 1 credit'}):'')]));
-  content=card('People','<div class="flex between"><p class="muted small">'+(roles.length?'Contacts matching the project’s target roles are labelled.':'Add names and professional contact details for this company.')+'</p>'+btn('+ Add person','dialog','primary',{'data-kind':'contact-add'})+'</div>'+
+   const rows=l.contacts.map(c=>tr(['<strong>'+e(c.name)+'</strong>','<span title="'+e(c.title||'')+'">'+e(c.designation||c.title||'—')+'</span>',c.email?verifyBadge(c.emailVerified)+outreachLink(ws,p,l,'Email',c.email,c.email):'—',c.linkedin?(contactAllowed(ws,p,l,'LinkedIn',c.linkedin)?'<a class="accent" href="'+e(c.linkedin)+'" target="_blank" rel="noopener noreferrer" title="Open LinkedIn profile" aria-label="Open LinkedIn profile">'+linkedinIcon()+'</a>':linkedinIcon()+' <span class="pill off">Unavailable for outreach</span>'):'—',c.source?ext(c.source,'Source'):'—',
+     roles.some(r=>((c.designation||'')+' '+(c.title||'')).toLowerCase().includes(r))?'<span class="pill green">Target role</span>':'',
+     btn('Edit','dialog','subtle',{'data-kind':'contact-edit','data-id':c.id})+
+     (limaAvailable&&!l.erasedAt&&!c.email?btn('Find work email','lima-email','subtle',{'data-id':c.id,title:'LimaData lookup · up to 1 credit'}):'')+
+     (reoonAvailable&&!l.erasedAt&&c.email?btn('Verify','verify-email','subtle',{'data-id':c.id,title:'Reoon POWER · 1 credit'}):'')]));
+   const emailCount=l.contacts.filter(c=>c.email).length;
+   content=card('People','<div class="flex between"><p class="muted small">'+(roles.length?'Contacts matching the project’s target roles are labelled.':'Add names and professional contact details for this company.')+'</p><div class="row-gap">'+(reoonAvailable&&!l.erasedAt&&emailCount?btn('Verify all emails ('+emailCount+')','verify-account','',{'title':'Reoon POWER · 1 credit each'}):'')+btn('+ Add person','dialog','primary',{'data-kind':'contact-add'})+'</div></div>'+
     '<div class="row-gap">'+table(['Name','Designation','Email','LinkedIn','Evidence','Fit',''],rows.length?rows:[blankRow(7,'No people have been added for this lead.')])+'</div>');
  }
  if(tab==='notes'){
