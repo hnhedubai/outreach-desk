@@ -1,6 +1,11 @@
 import {contactAllowed,handleKey} from './eligibility.js';
 
 export const e=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// First A-Z/0-9 character of a name (uppercased) for badge initials; falls back to a dot if none.
+export const initialOf=name=>{const m=String(name??'').match(/[A-Za-z0-9]/);return m?m[0].toUpperCase():'•';};
+// Per-glyph optical scaleX so wide (W/M) and narrow (I/J/1) letters fill the badge box evenly.
+const GLYPH_SCALE={W:.9,M:.94,I:1.26,J:1.16,'1':1.22,L:1.12,T:1.12,F:1.14,E:1.12,P:1.08,B:1.06,R:1.06,K:1.06,Y:1.08,X:1.04,Z:1.04,S:1.08,C:1.06,G:1.04,V:1.04,A:1.04,D:1.02,H:1.02,N:1.06,O:1,Q:1,U:1.02,'0':1};
+export const glyphStyle=ch=>'transform:scaleX('+String(GLYPH_SCALE[ch]??1.04)+')';
 export const channels=['Call','Email','Instagram','LinkedIn','SMS','WhatsApp'];
 export const leadChannels=['Email','WhatsApp','Instagram','LinkedIn','SMS','Call'];
 export const marks=['Attempted','Replied','Opt-out','Bounce','Invalid handle'];

@@ -1,8 +1,8 @@
-import {e,go,link,btn,header,card,empty,table,tr,blankRow,form,field,area,check,select,tabs,stat,bar,note,date,day,money,todayRows,icon} from './ui.js';
+import {e,go,link,btn,header,card,empty,table,tr,blankRow,form,field,area,check,select,tabs,stat,bar,note,date,day,money,todayRows,icon,initialOf,glyphStyle} from './ui.js';
 const settingsTabs=[['General','settings'],['Team','team'],['Do-not-contact','dnc'],['Usage & limits','usage'],['Audit export','audit']];
 const zones=['Asia/Dubai','Europe/London','Europe/Madrid','Europe/Warsaw','Europe/Berlin','America/New_York','America/Chicago','America/Los_Angeles','Asia/Singapore','Africa/Nairobi','UTC'];
 const zoneField=current=>'<label>Time zone'+select('timezone',[...new Set([current,...zones])],current)+'</label>';
-const memberAvatar=m=>'<span class="avatar">'+e(m.name.slice(0,1).toUpperCase())+'</span>';
+const memberAvatar=m=>'<span class="avatar"><span class="glyph" style="'+glyphStyle(initialOf(m.name))+'">'+e(initialOf(m.name))+'</span></span>';
 function onboardingHome(ws){
  const projectDone=ws.projects.length>0, leadsDone=ws.projects.some(p=>p.leads.length>0), teamDone=ws.members.length>1;
  const steps=[

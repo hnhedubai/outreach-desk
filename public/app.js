@@ -1,4 +1,4 @@
-import {e,go,link,btn,header,card,empty,form,field,area,check,select,todayRows,channels,icon,labels,menus,worked,ext} from './ui.js';
+import {e,go,link,btn,header,card,empty,form,field,area,check,select,todayRows,channels,icon,labels,menus,worked,ext,initialOf,glyphStyle} from './ui.js';
 import {workspacePage} from './workspace.js';
 import {projectPage} from './project.js';
 import {leadPage,newProjectPage,findPage,importPage,leadFields,personFields} from './flow.js';
@@ -20,7 +20,7 @@ const nav=(name,page,path,active,sub=false)=>'<a class="nav-item '+(active?'acti
 const projectNav=(ws,current)=>ws.projects.map(p=>{
  const expanded=current?.id===p.id;
  const num=todayRows(ws,p).filter(a=>!worked(a)).length;
-  return '<a class="nav-item'+(expanded?' active':'')+'" href="'+go('today',p.id)+'"><span class="project-icon">'+e(p.name.slice(0,1).toUpperCase())+'</span><span>'+e(p.name)+'</span><span class="nav-badge">'+num+'</span></a>'+
+  return '<a class="nav-item'+(expanded?' active':'')+'" href="'+go('today',p.id)+'"><span class="project-icon"><span class="glyph" style="'+glyphStyle(initialOf(p.name))+'">'+e(initialOf(p.name))+'</span></span><span>'+e(p.name)+'</span><span class="nav-badge">'+num+'</span></a>'+
  (expanded?menus.map(([label,key])=>nav(label,key,go(key,p.id),route().page===key||(key==='leads'&&route().page==='lead'),true)).join(''):'');
 }).join('');
 function shell(r,body){
@@ -35,7 +35,7 @@ function shell(r,body){
  link(ws.name,go('home'),'')+' <span>/</span> '+(p?link(p.name,go('overview',p.id),'')+' <span>/</span> ':'')+e(labelOf(r))+'</div><div class="head-actions">'+actions+'</div></header>'+
  '<aside class="sidebar '+(ui.mobile?'open':'')+'"><nav class="nav-scroll" aria-label="Main navigation">'+wsItems.map(([name,key])=>nav(name,key,go(key),!p&&(page===key||(key==='settings'&&['usage','audit'].includes(page))))).join('')+
  '<div class="nav-label">Projects</div>'+projectNav(ws,p)+nav('+ New project','plus',go('new'),page==='new')+'</nav>'+
- '<button class="account" data-action="menu" data-value="account" aria-expanded="'+(menu==='account')+'"><span class="avatar">'+e(me.name.slice(0,1).toUpperCase())+'</span><span><b>'+e(me.name)+'</b><br><small class="muted">'+e(me.role)+'</small></span><span class="dots">···</span></button>'+accountMenu+'</aside>'+
+ '<button class="account" data-action="menu" data-value="account" aria-expanded="'+(menu==='account')+'"><span class="avatar"><span class="glyph" style="'+glyphStyle(initialOf(me.name))+'">'+e(initialOf(me.name))+'</span></span><span><b>'+e(me.name)+'</b><br><small class="muted">'+e(me.role)+'</small></span><span class="dots">···</span></button>'+accountMenu+'</aside>'+
  '<main class="main page-'+e(page)+'" id="main"><div class="wrap">'+body+'</div></main></div>';
 }
 const renderErrorMessage='Something went wrong. Reload the page.';
