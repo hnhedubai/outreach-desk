@@ -408,7 +408,7 @@ dialog.wizard .btn.primary:hover{background:var(--accent-dark)}
 .th-tab.on{background:var(--peach);color:var(--accent-dark)}
 .th-notice{font-size:12.5px;color:var(--muted);background:var(--surface-notice);border:1px solid var(--line);border-radius:var(--r-row);padding:8px 12px}
 .th-panes{display:flex;gap:16px;align-items:stretch;height:calc(100vh - 250px);min-height:420px}
-.th-folders{flex:0 0 170px;background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:10px 8px;overflow:auto}
+.th-folders{flex:0 0 250px;background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:12px 10px;overflow:auto}
 .th-folder{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--r-row);font-size:13.5px;color:var(--text)}
 .th-folder:hover{background:var(--canvas)}
 .th-folder.active{background:var(--peach);color:var(--accent-dark);font-weight:650}
