@@ -368,8 +368,12 @@ async function onClick(event){
   return;
  }
  if(type==='enrichment-menu'){openDialog('enrichments');return;}
- const views={'today-channel':'todayChannel','today-pool':'todayPool','analytics-scope':'analyticsScope','analytics-tab':'analyticsSection','apps-filter':'apps','agent-channel':'agentChannel','draft-channel':'draftChannel','new-mode':'newMode'};
- if(views[type]){ui[views[type]]=d.value;if(type.startsWith('today-'))ui.todayPage=0;if(type==='agent-channel')ui.agentId='';render();return;}
+  const views={'today-channel':'todayChannel','today-pool':'todayPool','analytics-scope':'analyticsScope','analytics-tab':'analyticsSection','apps-filter':'apps','agent-channel':'agentChannel','draft-channel':'draftChannel','new-mode':'newMode','thread-view':'threadView'};
+  if(views[type]){ui[views[type]]=d.value;if(type.startsWith('today-'))ui.todayPage=0;if(type==='agent-channel')ui.agentId='';render({keepScroll:type!=='thread-view'});return;}
+  if(type==='thread-folder'){ui.threadFolder=d.value;render();return;}
+  if(type==='thread-gate'){ui.threadGateReveal=ui.threadGateReveal?'':'1';render();return;}
+  if(type==='thread-select'){ui.threadId=d.id;render();return;}
+  if(type==='thread-demo'){notify('Thread is a front-end preview — this action is not wired yet.');return;}
  if(type==='page'){ui[d.kind+'Page']=Math.max(0,Number(d.value)||0);render();return;}
  if(type==='cookie'){await action('cookie',{value:d.value});return;}
   if(type==='workspace-select'){await action(type,{workspace:d.id},{after:()=>{menu='';location.hash=go('home');}});return;}

@@ -1,4 +1,4 @@
-import {e,go,link,btn,header,card,empty,table,tr,blankRow,form,field,area,check,select,tabs,stat,bar,note,date,day,money,todayRows,icon,initialOf,glyphStyle} from './ui.js';
+import {e,go,link,btn,header,card,empty,table,tr,blankRow,form,field,area,check,select,tabs,stat,bar,note,date,day,money,todayRows,icon,initialOf,glyphStyle,verifyBadge} from './ui.js';
 const settingsTabs=[['General','settings'],['Team','team'],['Do-not-contact','dnc'],['Usage & limits','usage'],['Audit export','audit']];
 const zones=['Asia/Dubai','Europe/London','Europe/Madrid','Europe/Warsaw','Europe/Berlin','America/New_York','America/Chicago','America/Los_Angeles','Asia/Singapore','Africa/Nairobi','UTC'];
 const zoneField=current=>'<label>Time zone'+select('timezone',[...new Set([current,...zones])],current)+'</label>';
@@ -22,6 +22,121 @@ function onboardingHome(ws){
   card('Yes — I have a list','<p>Create the project, then upload an Excel or CSV file or paste domains.</p><div class="row-gap">'+btn('Create project →','onboard-start','',{'data-value':'import'})+'</div>')+'</div>';
  return header('Welcome to '+e(ws.name),'Either path creates a project with its own list, targeting and channels.',link('+ Create first project',go('new'),'btn primary'))+
   '<div class="onboard-grid">'+checklist+'<div class="onboard-main"><h2 class="onboard-q">Do you already have leads?</h2><p class="onboard-intro">Either way you end up with a project: what you offer, who it’s for, and a list we turn into who to contact today — per channel, per person.</p>'+chooser+'</div></div>';
+}
+const engClass={opened:'open',clicked:'click',replied:'reply',delivered:'ok',bounced:'bad',held:'warn'};
+function threadDemo(ws){
+ const emails=new Set(ws.members.flatMap(m=>[m.email,...(m.contacts||[])]).filter(Boolean).map(x=>String(x).toLowerCase()));
+ const real=x=>emails.has(String(x||'').toLowerCase());
+ const threads=[
+  {id:'t1',folder:'inbox',from:'Qaisar Ahmed',email:'qaisar@vitalise.io',subj:'Re: Albania pipeline timeline',time:'09:14',unread:true,eng:[['opened','opened 3×'],['clicked','clicked'],['delivered','delivered']],
+   meta:'Qaisar Ahmed <qaisar@vitalise.io> · to you · today 09:14',
+   paras:['Thanks for the note. Before we move forward we need to confirm the interconnection dates for the Albanian side — the current timeline is tight against the Q3 window.','Can you send the revised schedule so I can take it to the team?'],
+   quote:'On Nov 11, you wrote: …we can hold the offtake slot if the grid dates land by end of month…',
+   crm:['Lead · Albania','Deal · ALB-04']},
+  {id:'t2',folder:'inbox',from:'Laëtitia Bernigaud',email:'laetitia.bernigaud@tse.energy',subj:'TSE — press enquiry',time:'08:50',unread:false,eng:[['held','auto-reply']],
+   meta:'Laëtitia Bernigaud <laetitia.bernigaud@tse.energy> · to you · today 08:50',
+   paras:['Hello, thank you for your message. I am currently on leave and will be back on Thursday. For urgent press enquiries, contact Luc Derai (luc.derai@tse.energy).'],
+   crm:['Lead · TSE']},
+  {id:'t3',folder:'inbox',from:'Farhan Iqbal',email:'farhan@grynh2.com',subj:'Intro — e-SAF offtake',time:'Yest',unread:true,eng:[['replied','replied']],
+   meta:'Farhan Iqbal <farhan@grynh2.com> · to you · yesterday 16:02',
+   paras:['They replied — warm. Suggest we schedule a call this week before the pricing window moves.'],
+   crm:['Deal · SAF-02']},
+  {id:'t4',folder:'inbox',from:'Jan A. Ramos · DOE',email:'jramos@energy.gov',subj:'GH2-017 offshore wind',time:'Nov 2',unread:false,eng:[['bounced','bounced · org-policy']],
+   meta:'Delivery status · Jan A. Ramos <jramos@energy.gov>',
+   paras:['Your message to jramos@energy.gov was rejected by the recipient organisation’s mail policy (content filter). No reply is expected on this thread.'],
+   crm:['Lead · DOE']},
+  {id:'t5',folder:'inbox',from:'Saras Energia',email:'info@sarasenergia.com',subj:'Follow-up: hydrogen MoU',time:'Oct 30',unread:false,eng:[['held','catch-all']],
+   meta:'Saras Energia <info@sarasenergia.com> · held from bulk',
+   paras:['This address is on a catch-all domain. Single 1:1 sends are allowed with an explicit override; it stays out of bulk campaigns.'],
+   crm:[]},
+  {id:'t6',folder:'sent',from:'you → Qaisar Ahmed',email:'qaisar@vitalise.io',subj:'Grid dates — revised schedule attached',time:'Nov 11',unread:false,eng:[['opened','opened 2×'],['delivered','delivered']],
+   meta:'You → Qaisar Ahmed <qaisar@vitalise.io> · Nov 11 10:31',
+   paras:['Attaching the revised interconnection schedule for the Albanian side. Key dates are highlighted in the Gantt extract.'],
+   crm:['Deal · ALB-04']},
+  {id:'t7',folder:'drafts',from:'Draft',email:'',subj:'Nordic wind investors — intro',time:'Nov 10',unread:false,eng:[],
+   meta:'Local draft · edited Nov 10',
+   paras:['Draft body — never left this machine.'],
+   crm:[]},
+  {id:'t8',folder:'archive',from:'Farhan Iqbal',email:'farhan@grynh2.com',subj:'Re: portal feedback',time:'Nov 8',unread:false,eng:[['delivered','delivered']],
+   meta:'Farhan Iqbal <farhan@grynh2.com> · Nov 8',
+   paras:['Feedback round closed — archived.'],
+   crm:[]}
+ ].map(t=>({...t,real:real(t.email)}));
+ const recipients=[
+  {email:'luc.derai@tse.energy',status:'safe'},
+  {email:'farhan@grynh2.com',status:'safe'},
+  {email:'info@sarasenergia.com',status:'catch_all'},
+  {email:'press@cmci-sa.com',status:'unknown'},
+  {email:'old@defunct-grid.io',status:'invalid'}
+ ];
+ return {threads,recipients};
+}
+function threadPage(ws,ui){
+ const d=threadDemo(ws),view=ui.threadView||'inbox';
+ const sub=[['Inbox','inbox'],['Compose','compose'],['Campaigns','campaigns']].map(([label,key])=>'<button type="button" class="th-tab '+(view===key?'on':'')+'" data-action="thread-view" data-view="threadView" data-value="'+key+'">'+label+'</button>').join('');
+ const notice='<div class="th-notice">Front-end preview — sample data, nothing here sends or stores yet. Normal 1:1 mail will go out from the workspace’s root domain; campaigns through the bulk sender.</div>';
+ return '<div class="thread-wrap"><div class="th-subnav"><span class="th-subnav-label">'+icon('thread')+' Thread</span>'+sub+'</div>'+notice+(view==='compose'?threadCompose(ws,ui,d):view==='campaigns'?threadCampaigns(ws):threadInbox(ws,ui,d))+'</div>';
+}
+function threadInbox(ws,ui,d){
+ const folder=ui.threadFolder||'inbox';
+ const count=k=>k==='inbox'?d.threads.filter(t=>t.folder==='inbox'&&t.unread).length:k==='drafts'?d.threads.filter(t=>t.folder==='drafts').length:k==='all'?d.threads.length:0;
+ const folders=[['inbox','▸ Inbox'],['starred','★ Starred'],['sent','⤴ Sent'],['drafts','✎ Drafts'],['important','⚑ Important'],['spam','⚠ Spam'],['all','▤ All Mail'],['archive','▤ Archive'],['trash','🗑 Trash']];
+ const rows=d.threads.filter(t=>folder==='all'||t.folder===folder);
+ const sel=rows.find(t=>t.id===ui.threadId)||rows.find(t=>t.unread)||rows[0];
+ return '<div class="th-panes"><div class="th-folders">'+folders.map(([k,label])=>'<a class="th-folder '+(folder===k?'active':'')+'" href="#" data-action="thread-folder" data-value="'+k+'">'+label+(count(k)?'<span class="n">'+count(k)+'</span>':'')+'</a>').join('')+'</div>'+
+ '<div class="th-list"><div class="th-list-head">'+btn('All','thread-demo','subtle')+'<span class="count muted">'+rows.length+' shown</span></div>'+
+ (rows.length?rows.map(t=>'<div class="th-row'+(t.unread?' unread':'')+(sel&&sel.id===t.id?' active':'')+'" data-action="thread-select" data-id="'+t.id+'"><span class="th-dot'+(t.unread?'':' clear')+'"></span><div class="th-col"><div class="th-row1"><span class="th-from">'+e(t.from)+'</span><span class="th-subj">'+e(t.subj)+'</span><span class="th-time">'+e(t.time)+'</span></div><div class="th-snip">'+e(t.meta)+'</div><div class="th-eng">'+t.eng.map(([k,label])=>'<span class="badge '+engClass[k]+'">'+e(label)+'</span>').join('')+(t.real?'<span class="badge real">workspace contact</span>':'')+'</div></div></div>').join('')
+ :'<div class="th-empty">No messages in this folder.</div>')+'</div>'+
+ '<div class="th-reader">'+(sel?'<div class="th-reader-head"><h2>'+e(sel.subj)+'</h2><div class="muted small">'+e(sel.meta)+'</div></div>'+
+ (sel.crm.length?'<div class="th-crm"><b>CRM match:</b>'+sel.crm.map(x=>'<span class="th-tag">'+e(x)+'</span>').join('')+'<span class="muted small">linked automatically · preview</span></div>':'')+
+ '<div class="th-reader-body">'+sel.paras.map(x=>'<p>'+e(x)+'</p>').join('')+(sel.quote?'<div class="th-quote">'+e(sel.quote)+'</div>':'')+'</div>'+
+ '<div class="th-reader-actions">'+btn('Reply','thread-demo','primary')+btn('Reply all','thread-demo')+btn('Forward','thread-demo')+btn('✦ AI draft','thread-demo')+'<label class="th-nofollow">'+check('nofollow',ui.threadNoFollow,'',{'data-filter':'threadNoFollow'})+' No follow-up</label></div>'
+ :'<div class="th-empty">Nothing to read in this folder.</div>')+'</div></div>';
+}
+function threadCompose(ws,ui,d){
+ const mode=ui.threadMode||'normal';
+ const gate={safe:0,catch_all:0,unknown:0,invalid:0};
+ d.recipients.forEach(r=>gate[r.status]++);
+ const seg=['normal','campaign'].map(k=>'<button type="button" class="'+(mode===k?'on':'')+'" data-action="thread-mode" data-value="'+k+'">'+(k==='normal'?'Normal':'Campaign')+'</button>').join('');
+ return '<div class="th-compose-wrap"><div class="th-compose">'+
+ '<div class="th-compose-top">New message<div class="th-seg">'+seg+'</div></div>'+
+ '<div class="th-field"><label>From</label><div class="th-val"><span class="th-chip">'+e(ws.members[0].name)+' &lt;'+e(ws.members[0].email||'you@vitalise.io')+'&gt;</span><span class="muted small">root domain · relay</span></div></div>'+
+ '<div class="th-field"><label>To</label><div class="th-val"><div class="th-tochips">'+d.recipients.map(r=>'<span class="th-chip">'+verifyBadge(r.status)+' '+e(r.email)+'</span>').join('')+'<span class="th-chip dashed">+ add</span></div>'+
+ '<div class="th-gate">Gate: <b class="ok">✓ '+gate.safe+' safe</b> · <b class="warn">⚠ '+gate.catch_all+' catch-all</b> · <b class="muted">? '+gate.unknown+' unknown</b> · <b class="bad">✕ '+gate.invalid+' invalid</b>'+
+ btn('Verify all','thread-gate','subtle')+
+ (ui.threadGateReveal&&mode==='normal'?'<span class="muted small"><b class="warn">Catch-all blocked by default.</b> Single email only → <b class="ok">send-anyway override</b> · unknown <b>held</b> · invalid <b>suppressed</b></span>':'')+
+ (mode==='campaign'?'<span class="muted small"><b class="bad">Bulk stays strict — no catch-all override.</b></span>':'')+'</div></div></div>'+
+ '<div class="th-field"><label>Subject</label><div class="th-val"><input class="th-subject" value="Revised interconnection dates — Albania (ALB-04)" readonly></div></div>'+
+ '<div class="th-tools">'+btn('B','thread-demo','subtle')+btn('I','thread-demo','subtle')+btn('🔗','thread-demo','subtle')+btn('✦ AI','thread-demo','subtle')+'<span class="muted small">formal outreach voice</span></div>'+
+ '<div class="th-editor">'+area('','body','Dear Qaisar,\n\nThank you for the note. Please find the revised interconnection schedule below…\n\n[ extract the key dates ]',{rows:7,readonly:true})+'</div>'+
+ '<div class="th-firewall"><span>⚠</span><div><b>“extract (”</b> may be blocked by the DreamHost outbound firewall (rule 942151).<br><span class="muted">Suggested rewrite: “pull out the key dates”.</span></div></div>'+
+ '<div class="th-compose-foot"><span class="th-opt">'+btn('📎 Attach','thread-demo','subtle')+'</span><span class="th-opt">'+check('track',true,'',{disabled:true})+' Track opens/clicks</span><span class="th-opt">'+check('followup',true,'',{disabled:true})+' Follow-up (3–5d)</span><span class="th-send">'+btn('Send','thread-demo','primary disabled',{'aria-disabled':'true'})+'</span></div>'+
+ '</div></div>';
+}
+function threadCampaigns(ws){
+ const camps=[
+  {name:'Q4 e-SAF outreach',channel:'bulk sender',sent:312,total:1240,held:8,bounced:2,state:'review'},
+  {name:'Wind investors — Nordic',channel:'bulk sender',sent:448,total:700,held:0,bounced:5,state:'running'},
+  {name:'Iron & Steel offtake',channel:'draft',sent:0,total:0,held:0,bounced:0,state:'draft'}
+ ];
+ const steps=[['1 Audience','done'],['2 From','done'],['3 Content','on'],['4 Review',''],['5 Pacing','']];
+ const board=[['Sent','312','muted'],['Delivered','288','ok'],['Opened','141','open'],['Clicked','37','click'],['Replied','9','reply'],['Held','8','warn']];
+ return '<div class="th-camp"><div class="th-camp-head"><h2>Campaigns</h2><p class="muted">Bulk sends go through the workspace’s bulk sender subdomain. Review mode → Approve → booked. <span class="th-demo-tag">sample data</span></p></div>'+
+ '<div class="th-camp-grid"><div>'+btn('+ New campaign','thread-demo','primary row-gap')+'</div></div>'+
+ '<div class="th-camp-grid"><div class="stack">'+camps.map(c=>'<div class="th-crow"><div class="th-crow-meta"><b>'+e(c.name)+'</b><span class="muted small"> · '+e(c.channel)+'</span>'+
+ (c.total?'<div class="bar">'+bar(c.sent/c.total*100)+'</div><div class="small muted">'+c.sent+' / '+c.total+' sent · <span class="warn">'+c.held+' held</span> · <span class="bad">'+c.bounced+' bounced</span></div>':'<div class="small muted">not booked</div>')+
+ '</div>'+btn(c.state==='review'?'Review':c.state==='running'?'Open':'Continue','thread-demo','subtle')+'</div>').join('')+
+ '</div><div class="th-wiz"><b>Builder — Q4 e-SAF outreach</b><span class="th-demo-tag">sample data</span>'+
+ '<div class="th-wsteps">'+steps.map(([label,cls])=>'<span class="th-wstep '+cls+'">'+label+'</span>').join('')+'</div>'+
+ '<div class="th-kv"><span class="muted">Audience segment</span><b>safe-to-contact · 1,240</b></div>'+
+ '<div class="th-kv"><span class="muted">Gate breakdown</span><span><b class="ok">✓ 1,180</b> · <b class="bad">✕ 60 suppressed</b></span></div>'+
+ '<div class="th-kv"><span class="muted">Sender / reputation</span><b>warmup 25%</b></div>'+
+ '<div class="bar">'+bar(25)+'</div>'+
+ '<div class="th-kv"><span class="muted">Daily cap</span><b>2,000 · gap auto</b></div>'+
+ '<div class="small muted th-board-label">Live board</div>'+
+ '<div class="th-board">'+board.map(([label,value,cls])=>'<div class="th-stat"><div class="big '+cls+'">'+value+'</div><div class="lbl">'+label+'</div></div>').join('')+'</div>'+
+ '<div class="th-wiz-actions">'+btn('Save draft','thread-demo')+btn('Preview sample →','thread-demo','primary')+'</div>'+
+ '</div></div></div>';
 }
 export function workspacePage(page,ws,ui,state,{webSearch,firecrawlAvailable,jevAvailable,perplexityAvailable,limaAvailable}={}){
  const member=ws.members[0];
@@ -54,7 +169,7 @@ export function workspacePage(page,ws,ui,state,{webSearch,firecrawlAvailable,jev
   const filter=ui.apps||'All';
   return header('Apps','Workspace and project integrations.')+'<div class="filters">'+['All','Notifications','Email','CRM','Export','Search','Enrichment','Scoring'].map(k=>btn(k,'apps-filter',filter===k?'active':'',{'data-value':k})).join('')+'</div><div class="grid2">'+all.filter(x=>filter==='All'||x[1]===filter).map(x=>card(x[0],'<p>'+e(x[2])+'</p><span class="pill row-gap">'+e(x[3])+'</span>')).join('')+'</div>';
  }
- if(page==='thread')return '<div class="narrow">'+header('Thread','The shared email inbox for this workspace — read, reply, compose and follow up in one place.')+card('Coming soon',note('Thread is being built. Normal 1:1 mail will send from this workspace’s root domain and campaigns through a bulk sender. No sending is enabled yet.'))+'</div>';
+ if(page==='thread')return threadPage(ws,ui);
  let body='';
  if(page==='settings')body=header('Workspace','Name, slug, time zone and owner of this workspace.')+card('Workspace details',form('workspace-settings',field('Name','name',ws.name,{required:true})+field('Slug','slug',ws.id,{disabled:true})+zoneField(ws.timezone)))+
    '<div class="row-gap">'+card('Workspace owner','<strong>'+e(member.name)+'</strong> <span class="pill">Owner</span>')+'</div>';
