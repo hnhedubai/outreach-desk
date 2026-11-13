@@ -15,7 +15,7 @@ function route(){
  return {ws,p,page,lead,tab:parts[4]||'channels',badProject:hasProject&&!p};
 }
 const person=ws=>ws.members[0];
-const labelOf=r=>r.page==='lead'?r.lead?.name||'Lead':labels[r.page]||({home:'Home',team:'Team',dnc:'Do-not-contact',settings:'Settings',usage:'Usage & limits',audit:'Audit export',apps:'Apps',new:'New project',account:'Account settings',agent:'Agent mode'})[r.page]||'Home';
+const labelOf=r=>r.page==='lead'?r.lead?.name||'Lead':labels[r.page]||({home:'Home',team:'Team',thread:'Thread',dnc:'Do-not-contact',settings:'Settings',usage:'Usage & limits',audit:'Audit export',apps:'Apps',new:'New project',account:'Account settings',agent:'Agent mode'})[r.page]||'Home';
 const nav=(name,page,path,active,sub=false)=>'<a class="nav-item '+(active?'active ':'')+(sub?'sub':'')+'" href="'+e(path)+'">'+(sub?'':icon(page))+'<span class="nav-name">'+e(name)+'</span></a>';
 const projectNav=(ws,current)=>ws.projects.map(p=>{
  const expanded=current?.id===p.id;
@@ -28,7 +28,7 @@ function shell(r,body){
  const workspaceMenu=menu==='workspace'?'<div class="dropdown"><div class="nav-label">Workspaces</div>'+state.workspaces.map(w=>btn(w.name,'workspace-select',w.id===ws.id?'active':'',{'data-id':w.id})).join('')+btn('Add workspace','dialog','',{'data-kind':'workspace-add'})+'</div>':'';
  const accountMenu=menu==='account'?'<div class="dropdown"><div class="nav-label">'+e(me.name)+'</div>'+link('Account settings',go('account'),'')+
  btn('Change password','dialog','',{'data-kind':'password-change'})+btn('Cookie settings','dialog','',{'data-kind':'cookie'})+btn('Sign out','logout','subtle')+'</div>':'';
- const wsItems=[['Home','home'],['Team','team'],['Do-not-contact','dnc'],['Settings','settings'],['Apps','apps']];
+  const wsItems=[['Home','home'],['Team','team'],['Thread','thread'],['Do-not-contact','dnc'],['Settings','settings'],['Apps','apps']];
  const actions=p&&page!=='agent'?'<button type="button" class="btn notify" data-action="enrichment-menu"><span class="enriched-check" aria-hidden="true">✓</span>Enriched <span>'+p.enrichments.length+'</span></button><a class="btn primary agent-entry" href="'+go('agent',p.id)+'">Agent mode <span class="agent-count">'+n+' mine</span></a>':'';
  return '<div class="shell"><div class="brand-head"><button type="button" class="brand" data-action="menu" data-value="workspace" aria-expanded="'+(menu==='workspace')+'"><span class="logo"><img class="logo-img" src="/icon-192.png" alt="" width="28" height="28"></span>'+'<span class="brand-name">'+e(ws.name)+'</span>'+icon('down')+'</button>'+workspaceMenu+'</div>'+
  '<header class="topbar"><div class="crumb">'+btn('☰','mobile-menu','subtle',{id:'menu-toggle','aria-label':'Open navigation'})+
