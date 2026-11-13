@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vitalise · Thread — Front-End Mockup (Inbox · Compose · Campaigns)</title>
+<style>
+/* ===== Design tokens (from spec §2) ===== */
+:root{
+  --bg:#f6f7f9; --surface:#ffffff; --surface-2:#f0f2f5; --border:#e2e6ea;
+  --text:#1b1f24; --text-muted:#6b7480;
+  --accent:#2f6df6; --accent-hover:#255ae0;
+  /* verification language */
+  --v-safe:#1f9d55; --v-catchall:#d98314; --v-unknown:#7a8593; --v-invalid:#d1372b;
+  /* delivery language */
+  --d-sent:#8593a6; --d-delivered:#1f9d55; --d-bounced:#d1372b;
+  /* engagement language */
+  --e-opened:#0f9b8e; --e-clicked:#4b53c9; --e-reply:#1f9d55;
+  --radius:10px; --shadow:0 6px 24px rgba(20,30,50,.12);
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:var(--sans);color:var(--text);background:var(--bg);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer}
+/* ===== Layout ===== */
+#app{display:flex;flex-direction:column;height:100vh}
+#topbar{height:52px;flex:none;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:16px;padding:0 16px}
+#body{flex:1;display:flex;min-height:0}
+#rail{width:210px;flex:none;background:var(--surface);border-right:1px solid var(--border);padding:10px 8px;display:flex;flex-direction:column;gap:2px}
+#views{flex:1;min-width:0;position:relative;display:flex;flex-direction:column}
+.view{display:none;height:100%}
+.view.active{display:block}
+#thread-body{flex:1;min-height:0;position:relative}
+.subtabs{flex:none;display:flex;align-items:center;gap:4px;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border)}
+.subtabs .st-label{font-weight:750;margin-right:12px;display:flex;align-items:center;gap:8px}
+.subtabs .st{border:none;background:none;padding:7px 14px;border-radius:8px;font-size:13.5px;font-weight:600;color:var(--text-muted)}
+.subtabs .st:hover{background:var(--surface-2)}
+.subtabs .st.on{background:color-mix(in srgb,var(--accent) 12%,#fff);color:var(--accent)}
+
+/* ===== Topbar ===== */
+.brand{font-weight:700;letter-spacing:.2px;display:flex;align-items:center;gap:8px}
+.brand .logo{width:22px;height:22px;border-radius:6px;background:var(--accent)}
+.search{flex:1;max-width:520px;display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text-muted)}
+.search kbd{margin-left:auto;font-family:var(--mono);font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:1px 6px}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:20px;padding:5px 11px;background:var(--surface);font-size:12.5px;font-weight:600}
+.pill .dot{width:8px;height:8px;border-radius:50%}
+.avatar{width:30px;height:30px;border-radius:50%;background:#c9d3e2;color:#33455f;display:grid;place-items:center;font-weight:700}
+
+/* ===== Rail ===== */
+.rail-item{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:8px;color:var(--text);border:none;background:none;font-size:14px;width:100%;text-align:left;cursor:pointer}
+.rail-item:hover{background:var(--surface-2)}
+.rail-item.active{background:color-mix(in srgb,var(--accent) 12%,#fff);color:var(--accent);font-weight:650}
+.rail-item .ic{width:18px;text-align:center}
+.rail-item .count{margin-left:auto;font-size:11.5px;font-weight:700;background:var(--accent);color:#fff;border-radius:10px;min-width:20px;text-align:center;padding:1px 6px}
+.rail-item .count.warn{background:var(--v-catchall)}
+.rail-design{font-size:11px;color:var(--accent);text-decoration:none;font-weight:650;margin-left:8px;white-space:nowrap}
+.rail-design:hover{text-decoration:underline}
+.rail-sep{height:1px;background:var(--border);margin:8px 6px}
+.rail-label{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);padding:6px 11px 2px}
+
+/* ===== Buttons ===== */
+.btn{border:1px solid var(--border);background:var(--surface);border-radius:8px;padding:8px 14px;font-size:13.5px;font-weight:600;color:var(--text)}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:var(--accent-hover)}
+.btn.ghost{border-color:transparent;background:none}
+.btn.sm{padding:5px 10px;font-size:12.5px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* ===== Chips / badges ===== */
+.chip{display:inline-flex;align-items:center;gap:6px;border-radius:16px;padding:4px 10px 4px 8px;font-size:13px;background:var(--surface-2);border:1px solid var(--border)}
+.chip .x{color:var(--text-muted);font-weight:700}
+.gate{width:16px;height:16px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:10px;font-weight:800;flex:none}
+.gate.safe{background:var(--v-safe)} .gate.catchall{background:var(--v-catchall)} .gate.unknown{background:var(--v-unknown)} .gate.invalid{background:var(--v-invalid)}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:650;padding:2px 8px;border-radius:6px}
+.badge.opened{color:var(--e-opened);background:color-mix(in srgb,var(--e-opened) 12%,#fff)}
+.badge.clicked{color:var(--e-clicked);background:color-mix(in srgb,var(--e-clicked) 12%,#fff)}
+.badge.replied{color:var(--e-reply);background:color-mix(in srgb,var(--e-reply) 12%,#fff)}
+.badge.bounced{color:var(--d-bounced);background:color-mix(in srgb,var(--d-bounced) 12%,#fff)}
+.badge.delivered{color:var(--d-delivered);background:color-mix(in srgb,var(--d-delivered) 12%,#fff)}
+.badge.held{color:var(--v-catchall);background:color-mix(in srgb,var(--v-catchall) 14%,#fff)}
+
+/* ===== Cards / panes ===== */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.muted{color:var(--text-muted)} .small{font-size:12px} .mono{font-family:var(--mono)}
+
+/* ===== Mail 3-pane ===== */
+.panes{display:flex;height:100%}
+.pane-folders{width:180px;flex:none;border-right:1px solid var(--border);padding:12px 8px;overflow:auto}
+.pane-list{width:360px;flex:none;border-right:1px solid var(--border);overflow:auto}
+.pane-reader{flex:1;overflow:auto;min-width:0}
+.f-item{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:7px;font-size:13.5px}
+.f-item:hover{background:var(--surface-2)} .f-item.active{background:color-mix(in srgb,var(--accent) 12%,#fff);color:var(--accent);font-weight:650}
+.f-item .n{margin-left:auto;color:var(--text-muted);font-size:12px}
+.list-head{position:sticky;top:0;background:var(--surface);border-bottom:1px solid var(--border);padding:10px 12px;display:flex;gap:8px;align-items:center;z-index:1}
+.thread{display:flex;gap:9px;padding:11px 12px;border-bottom:1px solid var(--border);cursor:pointer}
+.thread:hover{background:var(--surface-2)} .thread.active{background:color-mix(in srgb,var(--accent) 9%,#fff)}
+.thread .box{width:15px;height:15px;border:1.5px solid var(--border);border-radius:4px;flex:none;margin-top:2px}
+.thread.unread{font-weight:650}
+.thread .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;margin-top:6px}
+.thread .col{min-width:0;flex:1}
+.thread .row1{display:flex;gap:6px;align-items:baseline}
+.thread .from{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+.thread .time{margin-left:auto;font-size:11.5px;color:var(--text-muted);font-weight:500}
+.thread .subj{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.thread .snip{color:var(--text-muted);font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12.5px}
+.thread .eng{display:flex;gap:6px;margin-top:5px;flex-wrap:wrap}
+.reader-head{padding:16px 22px;border-bottom:1px solid var(--border)}
+.reader-head h2{margin:0 0 6px;font-size:18px}
+.crm-banner{margin:14px 22px 0;background:color-mix(in srgb,var(--v-safe) 9%,#fff);border:1px solid color-mix(in srgb,var(--v-safe) 30%,#fff);border-radius:8px;padding:9px 12px;font-size:13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.crm-banner .tag{background:#fff;border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-weight:600}
+.reader-body{padding:18px 22px;max-width:760px}
+.reader-body p{color:#2a313a}
+.quote{border-left:3px solid var(--border);padding:4px 14px;color:var(--text-muted);margin-top:16px}
+.reader-actions{padding:14px 22px;display:flex;gap:10px;align-items:center;border-top:1px solid var(--border)}
+.reader-actions .chk{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-muted)}
+
+/* ===== Compose ===== */
+.compose-wrap{height:100%;display:flex;align-items:flex-start;justify-content:center;padding:26px}
+.compose{width:100%;max-width:720px;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.compose-top{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);font-weight:700}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-left:auto}
+.seg button{border:none;background:var(--surface);padding:5px 12px;font-size:12.5px;font-weight:600;color:var(--text-muted)}
+.seg button.on{background:var(--accent);color:#fff}
+.field{display:flex;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);align-items:flex-start}
+.field label{width:56px;color:var(--text-muted);font-size:13px;padding-top:5px;flex:none}
+.field .val{flex:1;min-width:0}
+.tochips{display:flex;flex-wrap:wrap;gap:7px}
+.gate-line{margin-top:8px;display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--text-muted);flex-wrap:wrap}
+.gate-line b{color:var(--text)}
+.subject-in{width:100%;border:none;outline:none;font-size:15px;font-weight:600}
+.editor-tools{display:flex;gap:6px;padding:8px 16px;border-bottom:1px solid var(--border);align-items:center}
+.tool{border:1px solid var(--border);background:var(--surface);border-radius:6px;padding:4px 9px;font-size:12.5px;font-weight:600}
+.tool.ai{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,#fff)}
+.editor{min-height:150px;padding:14px 16px;color:#2a313a}
+.firewall{margin:0 16px 12px;background:color-mix(in srgb,var(--v-catchall) 12%,#fff);border:1px solid color-mix(in srgb,var(--v-catchall) 34%,#fff);border-radius:8px;padding:9px 12px;font-size:12.5px;display:flex;gap:8px;align-items:flex-start}
+.firewall .jump{margin-left:auto;white-space:nowrap;color:var(--v-catchall);font-weight:700}
+.compose-foot{display:flex;align-items:center;gap:14px;padding:12px 16px;border-top:1px solid var(--border)}
+.compose-foot .opt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-muted)}
+.send-menu{margin-left:auto;display:flex;gap:8px;align-items:center}
+
+/* ===== Campaigns ===== */
+.camp{padding:22px;overflow:auto;height:100%}
+.camp h1{margin:0 0 4px;font-size:20px}
+.camp-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:18px;margin-top:18px}
+.crow{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface);margin-bottom:10px;cursor:pointer}
+.crow.active{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 15%,#fff)}
+.crow .meta{min-width:0}
+.crow .prog{height:6px;border-radius:4px;background:var(--surface-2);margin-top:8px;overflow:hidden}
+.crow .prog i{display:block;height:100%;background:var(--accent)}
+.wiz{padding:18px}
+.wiz-steps{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+.wstep{font-size:12px;font-weight:650;padding:5px 11px;border-radius:20px;background:var(--surface-2);color:var(--text-muted)}
+.wstep.on{background:var(--accent);color:#fff}
+.wstep.done{background:color-mix(in srgb,var(--v-safe) 16%,#fff);color:var(--v-safe)}
+.kv{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:13.5px}
+.kv:last-child{border-bottom:none}
+.board{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+.stat{border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--surface)}
+.stat .big{font-size:22px;font-weight:750}
+.stat .lbl{font-size:11.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
+.meter{height:8px;border-radius:5px;background:var(--surface-2);overflow:hidden;margin-top:6px}
+.meter i{display:block;height:100%;background:var(--v-safe)}
+
+/* ===== Generic page (Team / Settings) ===== */
+.page{padding:24px;overflow:auto;height:100%}
+.page-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:18px}
+.page-head h1{margin:0;font-size:20px}
+.page-head p{margin:2px 0 0}
+.page-head .btn{margin-left:auto}
+.member{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)}
+.member:last-child{border-bottom:none}
+.member .who{min-width:0}
+.member .who b{display:block}
+.role{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:6px;background:var(--surface-2);color:var(--text-muted)}
+.role.admin{background:color-mix(in srgb,var(--accent) 14%,#fff);color:var(--accent)}
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px}
+.status-dot.active{background:var(--v-safe)} .status-dot.idle{background:var(--v-unknown)} .status-dot.invited{background:var(--v-catchall)}
+/* settings */
+.settings-wrap{display:grid;grid-template-columns:200px 1fr;gap:18px;align-items:start}
+.settings-tabs{display:flex;flex-direction:column;gap:2px}
+.stab{padding:9px 12px;border-radius:8px;font-size:13.5px;color:var(--text-muted);border:none;background:none;text-align:left}
+.stab:hover{background:var(--surface-2)} .stab.on{background:color-mix(in srgb,var(--accent) 12%,#fff);color:var(--accent);font-weight:650}
+.settings-panel{padding:6px 18px}
+.set-row{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--border)}
+.set-row:last-child{border-bottom:none}
+.set-row .lab{width:200px;flex:none}
+.set-row .lab b{display:block;font-size:13.5px}
+.set-row .lab span{font-size:12px;color:var(--text-muted)}
+.set-row .ctl{margin-left:auto;display:flex;align-items:center;gap:10px}
+.inp{border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px;background:var(--surface);min-width:220px}
+.switch{width:38px;height:22px;border-radius:12px;background:var(--accent);position:relative;flex:none}
+.switch i{position:absolute;top:3px;left:19px;width:16px;height:16px;border-radius:50%;background:#fff}
+.switch.off{background:var(--border)} .switch.off i{left:3px}
+</style>
+</head>
+<body>
+<!-- SHELL -->
+<div id="app">
+  <!-- TOPBAR -->
+  <header id="topbar">
+    <div class="brand"><span class="logo"></span> Vitalise</div>
+    <div class="search">Search people, threads, campaigns… <kbd>⌘K</kbd></div>
+    <div class="top-right">
+      <span class="pill"><span class="dot" style="background:var(--v-safe)"></span> Reoon 128</span>
+      <span class="pill"><span class="dot" style="background:var(--accent)"></span> Postmark 9.1k</span>
+      <button class="btn primary" onclick="showView('compose')">✎ Compose</button>
+      <span class="avatar">QA</span>
+    </div>
+  </header>
+  <div id="body">
+    <!-- RAIL -->
+    <nav id="rail">
+      <button class="rail-item" data-nav="home"><span class="ic">⌂</span> Home</button>
+      <button class="rail-item" data-nav="team" onclick="showView('team')"><span class="ic">👥</span> Team</button>
+      <div class="rail-item active" data-nav="thread" onclick="showView('mail')"><span class="ic">✉</span> Thread <span class="count">12</span><a class="rail-design" href="vitalise-frontend-design.html" target="_blank" onclick="event.stopPropagation()" title="Open the front-end design spec for review">design ↗</a></div>
+      <button class="rail-item" data-nav="dnc"><span class="ic">⊘</span> Do-not-contact</button>
+      <button class="rail-item" data-nav="settings" onclick="showView('settings')"><span class="ic">⚙</span> Settings</button>
+      <button class="rail-item" data-nav="apps"><span class="ic">▦</span> Apps</button>
+    </nav>
+    <!-- VIEWS -->
+    <main id="views">
+      <div class="subtabs">
+        <span class="st-label">✉ Thread</span>
+        <button class="st on" data-v="mail" onclick="showView('mail')">Inbox</button>
+        <button class="st" data-v="compose" onclick="showView('compose')">Compose</button>
+        <button class="st" data-v="campaigns" onclick="showView('campaigns')">Campaigns</button>
+      </div>
+      <div id="thread-body">
+      <section id="view-mail" class="view active">
+        <div class="panes">
+          <div class="pane-folders">
+            <div class="f-item active">▸ Inbox <span class="n">12</span></div>
+            <div class="f-item">★ Starred</div>
+            <div class="f-item">⤴ Sent</div>
+            <div class="f-item">✎ Drafts <span class="n">3</span></div>
+            <div class="f-item">⚑ Important</div>
+            <div class="f-item">⚠ Spam</div>
+            <div class="f-item">▤ All Mail</div>
+            <div class="f-item">▤ Archive</div>
+            <div class="f-item">🗑 Trash</div>
+          </div>
+          <div class="pane-list">
+            <div class="list-head">
+              <button class="btn sm ghost">☐</button>
+              <button class="btn sm ghost">⟳</button>
+              <span class="muted small" style="margin-left:auto">12 new</span>
+            </div>
+            <div class="thread unread active">
+              <div class="box"></div><div class="dot"></div>
+              <div class="col">
+                <div class="row1"><span class="from">Qaisar Ahmed</span><span>·</span><span class="subj">Re: Albania pipeline timeline</span><span class="time">09:14</span></div>
+                <div class="snip">confirm the interconnection dates before we…</div>
+                <div class="eng"><span class="badge opened">▣ opened 3×</span><span class="badge clicked">↗ clicked</span><span class="badge delivered">✓ delivered</span></div>
+              </div>
+            </div>
+            <div class="thread">
+              <div class="box"></div>
+              <div class="col">
+                <div class="row1"><span class="from">Laëtitia Bernigaud</span><span>·</span><span class="subj">TSE — press enquiry</span><span class="time">08:50</span></div>
+                <div class="snip">out-of-office · back Thursday · route to Luc Deraï…</div>
+                <div class="eng"><span class="badge held">⧗ auto-reply</span></div>
+              </div>
+            </div>
+            <div class="thread unread">
+              <div class="box"></div><div class="dot"></div>
+              <div class="col">
+                <div class="row1"><span class="from">Farhan Iqbal</span><span>·</span><span class="subj">Intro — e-SAF offtake</span><span class="time">Yest</span></div>
+                <div class="snip">they replied, warm — schedule a call…</div>
+                <div class="eng"><span class="badge replied">↩ replied</span></div>
+              </div>
+            </div>
+            <div class="thread">
+              <div class="box"></div>
+              <div class="col">
+                <div class="row1"><span class="from">Jan A. Ramos · DOE</span><span>·</span><span class="subj">GH2-017 offshore wind</span><span class="time">Nov 2</span></div>
+                <div class="snip">rejected by organization policy (profanity filter)…</div>
+                <div class="eng"><span class="badge bounced">⚠ bounced · org-policy</span></div>
+              </div>
+            </div>
+            <div class="thread">
+              <div class="box"></div>
+              <div class="col">
+                <div class="row1"><span class="from">Saras Energia</span><span>·</span><span class="subj">Follow-up: hydrogen MoU</span><span class="time">Oct 30</span></div>
+                <div class="snip">catch-all domain — held from bulk, ok as single…</div>
+                <div class="eng"><span class="badge held">⚠ catch-all</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="pane-reader">
+            <div class="reader-head">
+              <h2>Re: Albania pipeline timeline</h2>
+              <div class="muted small">Qaisar Ahmed &lt;qaisar@…&gt; · to me · today 09:14</div>
+            </div>
+            <div class="crm-banner">
+              <b>CRM match:</b> <span class="tag">Lead · TSE</span> <span class="tag">Contact · Qaisar</span> <span class="tag">Deal · ALB-04</span>
+              <span class="muted small" style="margin-left:auto">linked automatically</span>
+            </div>
+            <div class="reader-body">
+              <p>Thanks for the note. Before we move forward we need to confirm the interconnection dates for the Albanian side — the current timeline is tight against the Q3 window.</p>
+              <p>Can you send the revised schedule so I can take it to the team?</p>
+              <div class="quote">On Nov 11, Farhan wrote:<br>…we can hold the offtake slot if the grid dates land by end of month…</div>
+            </div>
+            <div class="reader-actions">
+              <button class="btn primary" onclick="showView('compose')">Reply</button>
+              <button class="btn" onclick="showView('compose')">Reply all</button>
+              <button class="btn" onclick="showView('compose')">Forward</button>
+              <button class="btn" onclick="showView('compose')">✦ AI draft</button>
+              <span class="chk"><input type="checkbox"> No follow-up</span>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section id="view-compose" class="view">
+        <div class="compose-wrap">
+          <div class="compose">
+            <div class="compose-top">
+              New message
+              <div class="seg">
+                <button class="on" onclick="composeMode('normal',this)">Normal</button>
+                <button onclick="composeMode('campaign',this)">Campaign</button>
+              </div>
+            </div>
+
+            <div class="field"><label>From</label><div class="val">
+              <span class="chip">Qaisar Ahmed &lt;qaisar@vitalise.io&gt;</span>
+              <span class="muted small" style="margin-left:8px">root domain · DreamHost relay</span>
+            </div></div>
+
+            <div class="field"><label>To</label><div class="val">
+              <div class="tochips">
+                <span class="chip"><span class="gate safe">✓</span> luc.derai@tse.energy <span class="x">×</span></span>
+                <span class="chip"><span class="gate safe">✓</span> farhan@grynh2.com <span class="x">×</span></span>
+                <span class="chip"><span class="gate catchall">⚠</span> info@sarasenergia.com <span class="x">×</span></span>
+                <span class="chip"><span class="gate unknown">?</span> press@cmci-sa.com <span class="x">×</span></span>
+                <span class="chip"><span class="gate invalid">✕</span> old@defunct-grid.io <span class="x">×</span></span>
+                <span class="chip" style="border-style:dashed;color:var(--text-muted)">+ add</span>
+              </div>
+              <div class="gate-line">
+                Gate: <b style="color:var(--v-safe)">✓ 2 safe</b> · <b style="color:var(--v-catchall)">⚠ 1 catch-all</b> · <b style="color:var(--v-unknown)">? 1 unknown</b> · <b style="color:var(--v-invalid)">✕ 1 invalid</b>
+                <button class="btn sm" onclick="revealOverride()">Verify all</button>
+                <span id="override" class="muted small" style="display:none"><b style="color:var(--v-catchall)">Catch-all blocked.</b> Single email only → <a href="#" style="color:var(--accent);font-weight:700">Send anyway to catch-all</a> · unknown <b>held</b> · invalid <b>suppressed</b></span>
+                <span id="campaigngate" class="muted small" style="display:none"><b style="color:var(--v-invalid)">Bulk stays strict — no catch-all override.</b></span>
+              </div>
+            </div></div>
+
+            <div class="field"><label>Subject</label><div class="val"><input class="subject-in" value="Revised interconnection dates — Albania (ALB-04)"></div></div>
+
+            <div class="editor-tools">
+              <button class="tool">B</button><button class="tool">I</button><button class="tool">🔗</button>
+              <button class="tool ai">✦ AI</button><button class="tool">Check</button>
+              <span class="muted small" style="margin-left:auto">formal outreach voice</span>
+            </div>
+            <div class="editor">Dear Qaisar,<br><br>Thank you for the note. Please find the revised interconnection schedule below…<br><br>[ <b>extract</b> the key dates ]</div>
+
+            <div class="firewall">
+              <span>⚠</span>
+              <div><b>“extract (”</b> may be blocked by the DreamHost firewall (rule 942151).<br><span class="muted">Suggested rewrite: “pull out the key dates”.</span></div>
+              <span class="jump">↵ jump to word</span>
+            </div>
+
+            <div class="compose-foot">
+              <span class="opt">📎 Attach</span>
+              <span class="opt"><input type="checkbox" checked> Track opens/clicks</span>
+              <span class="opt"><input type="checkbox" checked> Follow-up (3–5d)</span>
+              <div class="send-menu">
+                <button class="btn" disabled>Send</button>
+                <button class="btn primary" id="sendbtn">Send ▾</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section id="view-campaigns" class="view">
+        <div class="camp">
+          <h1>Campaigns</h1>
+          <div class="muted">Bulk sends via Postmark on <span class="mono">bulk.vitalise.io</span>. Review mode → Approve → booked.</div>
+
+          <div class="camp-grid">
+            <!-- LEFT: campaign list -->
+            <div>
+              <button class="btn primary" style="margin-bottom:12px">+ New campaign</button>
+              <div class="crow active">
+                <div class="meta" style="flex:1">
+                  <b>Q4 e-SAF outreach</b> <span class="muted small">· Postmark · bulk.vitalise.io</span>
+                  <div class="prog"><i style="width:25%"></i></div>
+                  <div class="small muted" style="margin-top:6px">312 / 1,240 sent · <span style="color:var(--v-catchall)">8 held</span> · <span style="color:var(--d-bounced)">2 bounced</span></div>
+                </div>
+                <button class="btn sm">Review</button>
+              </div>
+              <div class="crow">
+                <div class="meta" style="flex:1">
+                  <b>Wind investors — Nordic</b> <span class="muted small">· Postmark</span>
+                  <div class="prog"><i style="width:64%"></i></div>
+                  <div class="small muted" style="margin-top:6px">448 / 700 sent · 0 held · 5 bounced</div>
+                </div>
+                <button class="btn sm">Open</button>
+              </div>
+              <div class="crow">
+                <div class="meta" style="flex:1">
+                  <b>Iron &amp; Steel offtake</b> <span class="muted small">· draft</span>
+                  <div class="small muted" style="margin-top:6px">not booked</div>
+                </div>
+                <button class="btn sm">Continue</button>
+              </div>
+            </div>
+
+            <!-- RIGHT: builder + live board -->
+            <div class="card wiz">
+              <b>Builder — Q4 e-SAF outreach</b>
+              <div class="wiz-steps" style="margin-top:12px">
+                <span class="wstep done">1 Audience</span>
+                <span class="wstep done">2 From</span>
+                <span class="wstep on">3 Content</span>
+                <span class="wstep">4 Review</span>
+                <span class="wstep">5 Pacing</span>
+              </div>
+
+              <div class="kv"><span class="muted">Audience segment</span><b>safe-to-contact · 1,240</b></div>
+              <div class="kv"><span class="muted">Gate breakdown</span><span><span style="color:var(--v-safe)">✓ 1,180</span> · <span style="color:var(--v-invalid)">✕ 60 suppressed</span></span></div>
+              <div class="kv"><span class="muted">Sender / reputation</span><b>Postmark · warmup 25%</b></div>
+              <div class="meter" style="margin:10px 0 14px"><i style="width:25%"></i></div>
+              <div class="kv"><span class="muted">Daily cap</span><b>2,000 · gap auto</b></div>
+
+              <div class="small muted" style="margin:14px 0 6px">Live board</div>
+              <div class="board">
+                <div class="stat"><div class="big" style="color:var(--d-sent)">312</div><div class="lbl">Sent</div></div>
+                <div class="stat"><div class="big" style="color:var(--d-delivered)">288</div><div class="lbl">Delivered</div></div>
+                <div class="stat"><div class="big" style="color:var(--e-opened)">141</div><div class="lbl">Opened</div></div>
+                <div class="stat"><div class="big" style="color:var(--e-clicked)">37</div><div class="lbl">Clicked</div></div>
+                <div class="stat"><div class="big" style="color:var(--e-reply)">9</div><div class="lbl">Replied</div></div>
+                <div class="stat"><div class="big" style="color:var(--v-catchall)">8</div><div class="lbl">Held</div></div>
+              </div>
+
+              <div style="display:flex;gap:10px;margin-top:16px">
+                <button class="btn">Save draft</button>
+                <button class="btn primary">Preview sample →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TEAM -->
+      <section id="view-team" class="view">
+        <div class="page">
+          <div class="page-head">
+            <div><h1>Team</h1><p class="muted">Manage workspace roles. Agent access to a project is set on its Agents page.</p></div>
+            <button class="btn primary">+ Invite member</button>
+          </div>
+          <div class="card">
+            <div class="member"><span class="avatar">QA</span><div class="who"><b>Qaisar Ahmed</b><span class="muted small">qaisar@vitalise.io</span></div><span class="role admin" style="margin-left:auto">Admin</span><span class="small muted" style="width:90px"><span class="status-dot active"></span>Active</span><button class="btn sm ghost">⋯</button></div>
+            <div class="member"><span class="avatar">FI</span><div class="who"><b>Farhan Iqbal</b><span class="muted small">farhan@vitalise.io</span></div><span class="role" style="margin-left:auto">Member</span><span class="small muted" style="width:90px"><span class="status-dot active"></span>Active</span><button class="btn sm ghost">⋯</button></div>
+            <div class="member"><span class="avatar">LB</span><div class="who"><b>Laëtitia Bernigaud</b><span class="muted small">laetitia@vitalise.io</span></div><span class="role" style="margin-left:auto">Member</span><span class="small muted" style="width:90px"><span class="status-dot idle"></span>Idle</span><button class="btn sm ghost">⋯</button></div>
+            <div class="member"><span class="avatar">AG</span><div class="who"><b>Agent · Outreach</b><span class="muted small">automated follow-ups</span></div><span class="role" style="margin-left:auto">Agent</span><span class="small muted" style="width:90px"><span class="status-dot active"></span>Active</span><button class="btn sm ghost">⋯</button></div>
+            <div class="member"><span class="avatar" style="background:#e6ebf2;color:#9aa6b6">·</span><div class="who"><b>new@vitalise.io</b><span class="muted small">invitation pending</span></div><span class="role" style="margin-left:auto">Member</span><span class="small muted" style="width:90px"><span class="status-dot invited"></span>Invited</span><button class="btn sm ghost">⋯</button></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section id="view-settings" class="view">
+        <div class="page">
+          <div class="page-head"><div><h1>Settings</h1><p class="muted">Workspace configuration for Vitalise.</p></div></div>
+          <div class="settings-wrap">
+            <div class="settings-tabs">
+              <button class="stab on">General</button>
+              <button class="stab">Team</button>
+              <button class="stab">Do-not-contact</button>
+              <button class="stab">Usage &amp; limits</button>
+              <button class="stab">Audit export</button>
+            </div>
+            <div class="settings-panel card">
+              <div class="set-row"><div class="lab"><b>Workspace name</b></div><div class="ctl"><input class="inp" value="Vitalise"></div></div>
+              <div class="set-row"><div class="lab"><b>Sending domain (normal)</b><span>1:1 mail · root domain via relay</span></div><div class="ctl"><input class="inp" value="vitalise.io"><span class="badge delivered">✓ SPF · DKIM · DMARC</span></div></div>
+              <div class="set-row"><div class="lab"><b>Bulk sender (Postmark)</b><span>campaigns · subdomain</span></div><div class="ctl"><input class="inp" value="bulk.vitalise.io"><span class="badge delivered">✓ verified</span></div></div>
+              <div class="set-row"><div class="lab"><b>Reoon API key</b><span>recipient verification</span></div><div class="ctl"><input class="inp mono" value="••••••••••••4f2a"><button class="btn sm">Reveal</button></div></div>
+              <div class="set-row"><div class="lab"><b>Open &amp; click tracking</b></div><div class="ctl"><span class="small muted">On</span><span class="switch"><i></i></span></div></div>
+              <div class="set-row"><div class="lab"><b>AI drafts model</b><span>cost-capped, Groq fallback</span></div><div class="ctl"><select class="inp" style="min-width:140px"><option>Haiku 5.5</option><option>Sonnet 5.5</option></select><span class="small muted">cap $30/mo</span></div></div>
+              <div class="set-row"><div class="lab"><b>Auto follow-ups</b><span>3–5d, event-driven</span></div><div class="ctl"><span class="switch"><i></i></span></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+      </div>
+    </main>
+  </div>
+</div>
+<script>
+function showView(v){
+  document.querySelectorAll('.view').forEach(function(s){s.classList.toggle('active',s.id==='view-'+v);});
+  document.querySelectorAll('.subtabs .st').forEach(function(b){b.classList.toggle('on',b.dataset.v===v);});
+  var inThread=(v==='mail'||v==='compose'||v==='campaigns');
+  document.querySelector('.subtabs').style.display=inThread?'flex':'none';
+  var navKey=inThread?'thread':v;
+  document.querySelectorAll('.rail-item').forEach(function(b){b.classList.toggle('active',b.dataset.nav===navKey);});
+}
+// thread selection
+document.querySelectorAll('.thread').forEach(function(t){
+  t.addEventListener('click',function(){
+    document.querySelectorAll('.thread').forEach(function(x){x.classList.remove('active');});
+    t.classList.add('active');
+  });
+});
+// compose mode toggle -> gate behavior changes (bulk strict)
+function composeMode(m,btn){
+  document.querySelectorAll('.seg button').forEach(function(b){b.classList.remove('on');});
+  btn.classList.add('on');
+  var camp=m==='campaign';
+  document.getElementById('campaigngate').style.display=camp?'inline':'none';
+  document.getElementById('override').style.display='none'; // reset
+}
+// reveal the sanctioned catch-all override (single email only)
+function revealOverride(){
+  var o=document.getElementById('override');
+  if(o.style.display==='none') o.style.display='inline';
+}
+// keyboard: c = compose, like Pulse
+document.addEventListener('keydown',function(e){
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;
+  if(e.key==='c')showView('compose');
+});
+</script>
+</body>
+</html>
