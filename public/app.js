@@ -5,7 +5,7 @@ import {leadPage,newProjectPage,findPage,importPage,leadFields,personFields} fro
 import {parseCsv,parseWorkbook} from './spreadsheet.js';
 
 const app=document.querySelector('#app'),dialog=document.querySelector('#dialog'),toast=document.querySelector('#toast');
-let state,authenticated=false,webSearch=false,jevAvailable=false,firecrawlAvailable=false,perplexityAvailable=false,limaAvailable=false,reoonAvailable=false,ui={},menu='',busy=false,noticeTimer;
+let state,authenticated=false,webSearch=false,jevAvailable=false,firecrawlAvailable=false,perplexityAvailable=false,limaAvailable=false,reoonAvailable=false,ui={},menu='',busy=false,noticeTimer,navCollapsed=false;
 const workspace=()=>state.workspaces.find(x=>x.id===state.active)||state.workspaces[0];
 function route(){
  const parts=location.hash.slice(1).split('/').filter(Boolean).map(x=>{try{return decodeURIComponent(x);}catch{return x;}});
@@ -16,7 +16,7 @@ function route(){
 }
 const person=ws=>ws.members[0];
 const labelOf=r=>r.page==='lead'?r.lead?.name||'Lead':labels[r.page]||({home:'Home',team:'Team',thread:'Thread',dnc:'Do-not-contact',settings:'Settings',usage:'Usage & limits',audit:'Audit export',apps:'Apps',new:'New project',account:'Account settings',agent:'Agent mode'})[r.page]||'Home';
-const nav=(name,page,path,active,sub=false)=>'<a class="nav-item '+(active?'active ':'')+(sub?'sub':'')+'" href="'+e(path)+'">'+(sub?'':icon(page))+'<span class="nav-name">'+e(name)+'</span></a>';
+const nav=(name,page,path,active,sub=false)=>'<a class="nav-item '+(active?'active ':'')+(sub?'sub':'')+'" href="'+e(path)+'" title="'+e(name)+'">'+(sub?'':icon(page))+'<span class="nav-name">'+e(name)+'</span></a>';
 const projectNav=(ws,current)=>ws.projects.map(p=>{
  const expanded=current?.id===p.id;
  const num=todayRows(ws,p).filter(a=>!worked(a)).length;
@@ -30,8 +30,8 @@ function shell(r,body){
  btn('Change password','dialog','',{'data-kind':'password-change'})+btn('Cookie settings','dialog','',{'data-kind':'cookie'})+btn('Sign out','logout','subtle')+'</div>':'';
   const wsItems=[['Home','home'],['Team','team'],['Thread','thread'],['Do-not-contact','dnc'],['Settings','settings'],['Apps','apps']];
  const actions=p&&page!=='agent'?'<button type="button" class="btn notify" data-action="enrichment-menu"><span class="enriched-check" aria-hidden="true">✓</span>Enriched <span>'+p.enrichments.length+'</span></button><a class="btn primary agent-entry" href="'+go('agent',p.id)+'">Agent mode <span class="agent-count">'+n+' mine</span></a>':'';
- return '<div class="shell"><div class="brand-head"><button type="button" class="brand" data-action="menu" data-value="workspace" aria-expanded="'+(menu==='workspace')+'"><span class="logo"><img class="logo-img" src="/icon-192.png" alt="" width="28" height="28"></span>'+'<span class="brand-name">'+e(ws.name)+'</span>'+icon('down')+'</button>'+workspaceMenu+'</div>'+
- '<header class="topbar"><div class="crumb">'+btn('☰','mobile-menu','subtle',{id:'menu-toggle','aria-label':'Open navigation'})+
+ return '<div class="shell'+(navCollapsed?' collapsed':'')+'"><div class="brand-head"><button type="button" class="brand" data-action="menu" data-value="workspace" aria-expanded="'+(menu==='workspace')+'"><span class="logo"><img class="logo-img" src="/icon-192.png" alt="" width="28" height="28"></span>'+'<span class="brand-name">'+e(ws.name)+'</span>'+icon('down')+'</button>'+workspaceMenu+'</div>'+
+ '<header class="topbar"><div class="crumb">'+btn('☰','mobile-menu','subtle',{id:'menu-toggle','aria-label':navCollapsed?'Expand navigation':'Collapse navigation',title:navCollapsed?'Expand navigation':'Collapse navigation'})+
  link(ws.name,go('home'),'')+' <span>/</span> '+(p?link(p.name,go('overview',p.id),'')+' <span>/</span> ':'')+e(labelOf(r))+'</div><div class="head-actions">'+actions+'</div></header>'+
  '<aside class="sidebar '+(ui.mobile?'open':'')+'"><nav class="nav-scroll" aria-label="Main navigation">'+wsItems.map(([name,key])=>nav(name,key,go(key),!p&&(page===key||(key==='settings'&&['usage','audit'].includes(page))))).join('')+
  '<div class="nav-label">Projects</div>'+projectNav(ws,p)+nav('+ New project','plus',go('new'),page==='new')+'</nav>'+
@@ -354,7 +354,7 @@ async function onClick(event){
  }
  const d=button.dataset,type=d.action,r=route(),p=r.p,l=r.lead;
  if(type==='menu'){menu=menu===d.value?'':d.value;render();return;}
- if(type==='mobile-menu'){ui.mobile=!ui.mobile;render();return;}
+  if(type==='mobile-menu'){if(matchMedia('(max-width:620px)').matches)ui.mobile=!ui.mobile;else navCollapsed=!navCollapsed;render();return;}
  if(type==='dialog'){menu='';render();openDialog(d.kind,d);return;}
  if(type==='close-dialog'){dialog.close();return;}
  if(type==='toggle-password'){
