@@ -77,8 +77,7 @@ function threadDemo(ws){
 }
 function threadPage(ws,ui){
  const d=threadDemo(ws),view=ui.threadView||'inbox';
- const notice='<div class="th-notice">Front-end preview — sample data, nothing here sends or stores yet. Normal 1:1 mail will go out from the workspace’s root domain; campaigns through the bulk sender.</div>';
- return '<div class="thread-wrap">'+notice+(view==='compose'?threadCompose(ws,ui,d):view==='campaigns'?threadCampaigns(ws):threadInbox(ws,ui,d))+'</div>';
+ return '<div class="thread-wrap">'+(view==='compose'?threadCompose(ws,ui,d):view==='campaigns'?threadCampaigns(ws):threadInbox(ws,ui,d))+'</div>';
 }
 function threadInbox(ws,ui,d){
  const folder=ui.threadFolder||'inbox';
