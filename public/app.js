@@ -1,5 +1,5 @@
 import {e,go,link,btn,header,card,empty,form,field,area,check,select,todayRows,channels,icon,labels,menus,worked,ext,initialOf,glyphStyle} from './ui.js';
-import {workspacePage} from './workspace.js';
+import {workspacePage,threadTopnav} from './workspace.js';
 import {projectPage} from './project.js';
 import {leadPage,newProjectPage,findPage,importPage,leadFields,personFields} from './flow.js';
 import {parseCsv,parseWorkbook} from './spreadsheet.js';
@@ -15,7 +15,7 @@ function route(){
  return {ws,p,page,lead,tab:parts[4]||'channels',badProject:hasProject&&!p};
 }
 const person=ws=>ws.members[0];
-const labelOf=r=>r.page==='lead'?r.lead?.name||'Lead':labels[r.page]||({home:'Home',team:'Team',thread:'Thread',dnc:'Do-not-contact',settings:'Settings',usage:'Usage & limits',audit:'Audit export',apps:'Apps',new:'New project',account:'Account settings',agent:'Agent mode'})[r.page]||'Home';
+const labelOf=r=>r.page==='lead'?r.lead?.name||'Lead':r.page==='thread'?'':labels[r.page]||({home:'Home',team:'Team',thread:'Thread',dnc:'Do-not-contact',settings:'Settings',usage:'Usage & limits',audit:'Audit export',apps:'Apps',new:'New project',account:'Account settings',agent:'Agent mode'})[r.page]||'Home';
 const nav=(name,page,path,active,sub=false)=>'<a class="nav-item '+(active?'active ':'')+(sub?'sub':'')+'" href="'+e(path)+'" title="'+e(name)+'">'+(sub?'':icon(page))+'<span class="nav-name">'+e(name)+'</span></a>';
 const projectNav=(ws,current)=>ws.projects.map(p=>{
  const expanded=current?.id===p.id;
@@ -32,7 +32,7 @@ function shell(r,body){
  const actions=p&&page!=='agent'?'<button type="button" class="btn notify" data-action="enrichment-menu"><span class="enriched-check" aria-hidden="true">✓</span>Enriched <span>'+p.enrichments.length+'</span></button><a class="btn primary agent-entry" href="'+go('agent',p.id)+'">Agent mode <span class="agent-count">'+n+' mine</span></a>':'';
  return '<div class="shell'+(navCollapsed?' collapsed':'')+'"><div class="brand-head"><button type="button" class="brand" data-action="menu" data-value="workspace" aria-expanded="'+(menu==='workspace')+'"><span class="logo"><img class="logo-img" src="/icon-192.png" alt="" width="28" height="28"></span>'+'<span class="brand-name">'+e(ws.name)+'</span>'+icon('down')+'</button>'+workspaceMenu+'</div>'+
  '<header class="topbar"><div class="crumb">'+btn('☰','mobile-menu','subtle',{id:'menu-toggle','aria-label':navCollapsed?'Expand navigation':'Collapse navigation',title:navCollapsed?'Expand navigation':'Collapse navigation'})+
- link(ws.name,go('home'),'')+' <span>/</span> '+(p?link(p.name,go('overview',p.id),'')+' <span>/</span> ':'')+e(labelOf(r))+'</div><div class="head-actions">'+actions+'</div></header>'+
+ (page==='thread'?threadTopnav(ui):link(ws.name,go('home'),'')+' <span>/</span> '+(p?link(p.name,go('overview',p.id),'')+' <span>/</span> ':'')+e(labelOf(r)))+'</div><div class="head-actions">'+actions+'</div></header>'+
  '<aside class="sidebar '+(ui.mobile?'open':'')+'"><nav class="nav-scroll" aria-label="Main navigation">'+wsItems.map(([name,key])=>nav(name,key,go(key),!p&&(page===key||(key==='settings'&&['usage','audit'].includes(page))))).join('')+
  '<div class="nav-label">Projects</div>'+projectNav(ws,p)+nav('+ New project','plus',go('new'),page==='new')+'</nav>'+
  '<button class="account" data-action="menu" data-value="account" aria-expanded="'+(menu==='account')+'"><span class="avatar"><span class="glyph" style="'+glyphStyle(initialOf(me.name))+'">'+e(initialOf(me.name))+'</span></span><span><b>'+e(me.name)+'</b><br><small class="muted">'+e(me.role)+'</small></span><span class="dots">···</span></button>'+accountMenu+'</aside>'+

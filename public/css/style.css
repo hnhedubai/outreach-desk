@@ -404,6 +404,7 @@ dialog.wizard .btn.primary:hover{background:var(--accent-dark)}
 .main.page-thread>.wrap{max-width:none;margin:0}
 .thread-wrap{display:flex;flex-direction:column;height:calc(100vh - var(--top));background:var(--paper)}
 .th-subnav{flex:none;display:flex;align-items:center;gap:4px;padding:8px 16px;background:var(--paper);border-bottom:1px solid var(--line)}
+.crumb .th-tab{height:30px}
 .th-subnav-label{display:inline-flex;align-items:center;gap:8px;font-weight:700;margin-right:10px}
 .th-tab{border:0;background:none;border-radius:var(--r-row);padding:6px 13px;font-weight:600;color:var(--muted)}
 .th-tab:hover{background:var(--peach)}
