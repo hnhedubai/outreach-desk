@@ -54,6 +54,7 @@ export function workspacePage(page,ws,ui,state,{webSearch,firecrawlAvailable,jev
   const filter=ui.apps||'All';
   return header('Apps','Workspace and project integrations.')+'<div class="filters">'+['All','Notifications','Email','CRM','Export','Search','Enrichment','Scoring'].map(k=>btn(k,'apps-filter',filter===k?'active':'',{'data-value':k})).join('')+'</div><div class="grid2">'+all.filter(x=>filter==='All'||x[1]===filter).map(x=>card(x[0],'<p>'+e(x[2])+'</p><span class="pill row-gap">'+e(x[3])+'</span>')).join('')+'</div>';
  }
+ if(page==='thread')return '<div class="narrow">'+header('Thread','The shared email inbox for this workspace — read, reply, compose and follow up in one place.')+card('Coming soon',note('Thread is being built. Normal 1:1 mail will send from this workspace’s root domain and campaigns through a bulk sender. No sending is enabled yet.'))+'</div>';
  let body='';
  if(page==='settings')body=header('Workspace','Name, slug, time zone and owner of this workspace.')+card('Workspace details',form('workspace-settings',field('Name','name',ws.name,{required:true})+field('Slug','slug',ws.id,{disabled:true})+zoneField(ws.timezone)))+
    '<div class="row-gap">'+card('Workspace owner','<strong>'+e(member.name)+'</strong> <span class="pill">Owner</span>')+'</div>';
