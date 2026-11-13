@@ -83,7 +83,7 @@ function threadInbox(ws,ui,d){
  const folders=[['inbox','▸ Inbox'],['starred','★ Starred'],['sent','⤴ Sent'],['drafts','✎ Drafts'],['important','⚑ Important'],['spam','⚠ Spam'],['all','▤ All Mail'],['archive','▤ Archive'],['trash','🗑 Trash']];
  const rows=d.threads.filter(t=>folder==='all'||t.folder===folder);
  const sel=rows.find(t=>t.id===ui.threadId)||rows.find(t=>t.unread)||rows[0];
- return '<div class="th-panes"><div class="th-folders">'+folders.map(([k,label])=>'<a class="th-folder '+(folder===k?'active':'')+'" href="#" data-action="thread-folder" data-value="'+k+'">'+label+(count(k)?'<span class="n">'+count(k)+'</span>':'')+'</a>').join('')+'</div>'+
+ return '<div class="th-panes"><div class="th-folders"><div class="th-compose-row">'+btn('✎ Compose','thread-view','primary',{'data-value':'compose'})+'</div>'+folders.map(([k,label])=>'<a class="th-folder '+(folder===k?'active':'')+'" href="#" data-action="thread-folder" data-value="'+k+'">'+label+(count(k)?'<span class="n">'+count(k)+'</span>':'')+'</a>').join('')+'</div>'+
  '<div class="th-list"><div class="th-list-head">'+btn('All','thread-demo','subtle')+'<span class="count muted">'+rows.length+' shown</span></div>'+
  (rows.length?rows.map(t=>'<div class="th-row'+(t.unread?' unread':'')+(sel&&sel.id===t.id?' active':'')+'" data-action="thread-select" data-id="'+t.id+'"><span class="th-dot'+(t.unread?'':' clear')+'"></span><div class="th-col"><div class="th-row1"><span class="th-from">'+e(t.from)+'</span><span class="th-subj">'+e(t.subj)+'</span><span class="th-time">'+e(t.time)+'</span></div><div class="th-snip">'+e(t.meta)+'</div><div class="th-eng">'+t.eng.map(([k,label])=>'<span class="badge '+engClass[k]+'">'+e(label)+'</span>').join('')+(t.real?'<span class="badge real">workspace contact</span>':'')+'</div></div></div>').join('')
  :'<div class="th-empty">No messages in this folder.</div>')+'</div>'+
@@ -99,7 +99,7 @@ function threadCompose(ws,ui,d){
  d.recipients.forEach(r=>gate[r.status]++);
  const seg=['normal','campaign'].map(k=>'<button type="button" class="'+(mode===k?'on':'')+'" data-action="thread-mode" data-value="'+k+'">'+(k==='normal'?'Normal':'Campaign')+'</button>').join('');
  return '<div class="th-compose-wrap"><div class="th-compose">'+
- '<div class="th-compose-top">New message<div class="th-seg">'+seg+'</div></div>'+
+ '<div class="th-compose-top"><span class="th-compose-title">New message</span><div class="th-seg">'+seg+'</div></div>'+
  '<div class="th-field"><label>From</label><div class="th-val"><span class="th-chip">'+e(ws.members[0].name)+' &lt;'+e(ws.members[0].email||'you@vitalise.io')+'&gt;</span><span class="muted small">root domain · relay</span></div></div>'+
  '<div class="th-field"><label>To</label><div class="th-val"><div class="th-tochips">'+d.recipients.map(r=>'<span class="th-chip">'+verifyBadge(r.status)+' '+e(r.email)+'</span>').join('')+'<span class="th-chip dashed">+ add</span></div>'+
  '<div class="th-gate">Gate: <b class="ok">✓ '+gate.safe+' safe</b> · <b class="warn">⚠ '+gate.catch_all+' catch-all</b> · <b class="muted">? '+gate.unknown+' unknown</b> · <b class="bad">✕ '+gate.invalid+' invalid</b>'+
