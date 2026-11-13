@@ -23,6 +23,10 @@ function onboardingHome(ws){
  return header('Welcome to '+e(ws.name),'Either path creates a project with its own list, targeting and channels.',link('+ Create first project',go('new'),'btn primary'))+
   '<div class="onboard-grid">'+checklist+'<div class="onboard-main"><h2 class="onboard-q">Do you already have leads?</h2><p class="onboard-intro">Either way you end up with a project: what you offer, who it’s for, and a list we turn into who to contact today — per channel, per person.</p>'+chooser+'</div></div>';
 }
+export function threadTopnav(ui){
+ const view=ui.threadView||'inbox';
+ return '<span class="th-subnav-label">'+icon('thread')+' Thread</span>'+[['Inbox','inbox'],['Compose','compose'],['Campaigns','campaigns']].map(([label,key])=>'<button type="button" class="th-tab '+(view===key?'on':'')+'" data-action="thread-view" data-value="'+key+'">'+label+'</button>').join('');
+}
 const engClass={opened:'open',clicked:'click',replied:'reply',delivered:'ok',bounced:'bad',held:'warn'};
 function threadDemo(ws){
  const emails=new Set(ws.members.flatMap(m=>[m.email,...(m.contacts||[])]).filter(Boolean).map(x=>String(x).toLowerCase()));
