@@ -69,8 +69,8 @@ const send=(res,status,data,type='application/json; charset=utf-8')=>{
   catch{status=500;payload=JSON.stringify({error:'The response could not be encoded.'});}
  }
  try{
-  res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
-  'Content-Security-Policy':"default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'","Referrer-Policy":"no-referrer"});
+   res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Robots-Tag':'noindex, nofollow',
+   'Content-Security-Policy':"default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'","Referrer-Policy":"no-referrer"});
   res.end(payload);
  }catch{/* the client disconnected before the response completed */}
 };
@@ -96,8 +96,8 @@ async function body(req,limit=3_000_000){
   return value;
  }catch{throw Object.assign(new Error('Expected a valid JSON object.'),{status:400});}
 }
-const paths=new Map([['/','index.html'],['/index.html','index.html'],['/app.js','app.js'],['/css/style.css','css/style.css'],['/spreadsheet.js','spreadsheet.js'],['/ui.js','ui.js'],['/eligibility.js','eligibility.js'],['/project.js','project.js'],['/workspace.js','workspace.js'],['/flow.js','flow.js'],['/favicon.ico','favicon.ico'],['/apple-icon.png','apple-icon.png'],['/icon-192.png','icon-192.png'],['/icon-384.png','icon-384.png'],['/fonts/Inter.ttf','fonts/Inter.ttf'],['/fonts/SpaceGrotesk.ttf','fonts/SpaceGrotesk.ttf']]);
-const mime={html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',ttf:'font/ttf',ico:'image/x-icon',png:'image/png'};
+const paths=new Map([['/','index.html'],['/index.html','index.html'],['/robots.txt','robots.txt'],['/app.js','app.js'],['/css/style.css','css/style.css'],['/spreadsheet.js','spreadsheet.js'],['/ui.js','ui.js'],['/eligibility.js','eligibility.js'],['/project.js','project.js'],['/workspace.js','workspace.js'],['/sanitize.js','sanitize.js'],['/flow.js','flow.js'],['/favicon.ico','favicon.ico'],['/apple-icon.png','apple-icon.png'],['/icon-192.png','icon-192.png'],['/icon-384.png','icon-384.png'],['/fonts/Inter.ttf','fonts/Inter.ttf'],['/fonts/SpaceGrotesk.ttf','fonts/SpaceGrotesk.ttf']]);
+const mime={html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',txt:'text/plain; charset=utf-8',ttf:'font/ttf',ico:'image/x-icon',png:'image/png'};
 const keyAvailable=()=>Boolean(process.env.EXA_API_KEY);
 const scoring=new Set();
 const requestError=(status,message)=>Object.assign(new Error(message),{status});
