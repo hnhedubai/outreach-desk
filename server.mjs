@@ -4,7 +4,7 @@ import {readFile,mkdir} from 'node:fs/promises';
 import {join,dirname,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {enforceTlsVerification,openStore} from './db.mjs';
-import {createState,perform,cleanDomain,runDaily,reconcileAssignments,recordJevFit} from './model.mjs';
+import {createState,perform,cleanDomain,runDaily,reconcileAssignments,recordJevFit,ensureThreads} from './model.mjs';
 import {currentJevFit,jevAvailable,jevInput,scoreWithJev} from './jev.mjs';
 import {firecrawlAvailable,firecrawlSearch} from './firecrawl.mjs';
 import {perplexityAvailable,perplexitySearch,limaAvailable,findLimaEmail,reoonAvailable,verifyReoonEmail,reoonBalance} from './research-providers.mjs';
@@ -43,7 +43,7 @@ await store.seed(JSON.stringify(createState()));
 const read=async()=>{
  const row=await store.getState();
  if(!row)throw requestError(500,'Saved workspace data is unreadable. Restore it from a backup.');
- try{return {...JSON.parse(row.document),revision:row.revision};}
+ try{const state={...JSON.parse(row.document),revision:row.revision};for(const w of state.workspaces||[])ensureThreads(w);return state;}
  catch{throw requestError(500,'Saved workspace data is unreadable. Restore it from a backup.');}
 };
 // Serialize state for storage; a state larger than V8's max string length is reported, not crashed.

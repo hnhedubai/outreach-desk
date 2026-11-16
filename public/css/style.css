@@ -505,4 +505,33 @@ dialog.wizard .btn.primary:hover{background:var(--accent-dark)}
 .th-stat .warn{color:var(--warning)}
 .th-stat .bad{color:var(--danger)}
 .th-wiz-actions{display:flex;gap:10px;margin-top:16px}
+.th-search{flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px;background:var(--paper)}
+.th-row{align-items:flex-start}
+.th-star{flex:none;border:0;background:none;cursor:pointer;font-size:15px;line-height:1;margin-top:1px;color:var(--muted);padding:0 2px}
+.th-star.on{color:var(--warning)}
+.th-reader-tools{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.th-labels{display:flex;gap:6px;flex-wrap:wrap;padding:10px 22px 0}
+.th-msg{border:1px solid var(--line);border-radius:var(--r-row);margin-bottom:10px;background:var(--paper);overflow:hidden}
+.th-msg.mine{border-color:#d8c9e6}
+.th-msg-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:9px 12px;background:var(--canvas);border-bottom:1px solid var(--line-light);font-size:12.5px}
+.th-msg.mine .th-msg-head{background:var(--peach)}
+.th-msg-who{font-weight:700}
+.th-msg-mail{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:42%}
+.th-msg-time{margin-left:auto;color:var(--muted)}
+.th-msg-actions{display:flex;gap:6px;width:100%;margin-top:2px}
+.th-msg-body{padding:12px 14px}
+.th-msg-body p{line-height:1.6;margin:0 0 10px}
+.th-msg-body p:last-child{margin-bottom:0}
+.th-msg-body ul,.th-msg-body ol{margin:0 0 10px;padding-left:22px}
+.th-msg-body blockquote{border-left:3px solid var(--line);margin:8px 0;padding:2px 12px;color:var(--muted)}
+.th-msg-body a{color:var(--accent-dark)}
+.th-compose{display:flex;flex-direction:column;min-height:100%}
+.th-tools{flex-wrap:wrap}
+.th-fmt{min-width:34px;padding:4px 9px;font-size:13px}
+.th-editor{padding:8px 16px;flex:1;min-height:150px}
+.th-edit{min-height:150px;border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--paper);line-height:1.6;outline:none;overflow:auto}
+.th-edit:focus{border-color:var(--accent)}
+.th-edit p{margin:0 0 10px}
+.th-edit blockquote{border-left:3px solid var(--line);margin:8px 0;padding:2px 12px;color:var(--muted)}
+.th-edit:empty::before{content:attr(data-placeholder);color:var(--soft)}
 @media(max-width:1100px){.th-panes{flex-direction:column;min-height:640px}.th-folders{flex:none}.th-list{flex:none;max-height:340px}.th-camp-grid{grid-template-columns:1fr}}

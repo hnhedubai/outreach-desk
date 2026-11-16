@@ -255,7 +255,23 @@ function workspaceWizardHtml(){
 }
 const hidden=(name,value)=>'<input type="hidden" name="'+e(name)+'" value="'+e(value)+'">';
 const values=form=>Object.fromEntries(new FormData(form));
-const isChecked=(data,key)=>data[key]!=null;
+const selfEmail=()=>String(workspace().members[0]?.email||'').toLowerCase();
+const splitRecipients=value=>String(value||'').split(/[,\s;]+/).map(s=>s.trim()).filter(s=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s));
+function threadForm(){
+ return {to:splitRecipients(app.querySelector('.th-to')?.value),cc:splitRecipients(app.querySelector('.th-cc')?.value),
+  subject:app.querySelector('.th-subject')?.value||'',bodyHtml:app.querySelector('.th-edit')?.innerHTML||''};
+}
+function draftFromMessage(threadId,messageId,mode){
+ const thread=(workspace().threads||[]).find(x=>x.id===threadId);if(!thread)return null;
+ const message=thread.messages.find(x=>x.id===messageId)||thread.messages.at(-1);
+ const se=selfEmail(),seen=new Set(),to=[],cc=[];
+ const push=(list,target)=>{for(const p of list||[]){const k=String(p.email||'').toLowerCase();if(!p.email||k===se||seen.has(k))continue;seen.add(k);target.push(p.email);}};
+ if(mode==='reply'){push(message.direction==='out'?message.to:[message.from],to);}
+ else if(mode==='replyAll'){push(message.direction==='out'?[...message.to,...message.cc]:[message.from,...message.to,...message.cc],to);}
+ const raw=message.subject||thread.subject||'';
+ const subject=mode==='forward'?'Fwd: '+(thread.subject||'(no subject)'):(/^(re|fwd):/i.test(raw)?raw:'Re: '+raw);
+ return {mode,threadId,messageId:message.id,leadId:thread.leadId||'',to,cc,subject,bodyHtml:''};
+}
 function targetDraft(data){
  const p=route().p,t=ui.targetDraft||p.targeting;
  return {...t,website:data.website,offer:data.offer,ideal:data.ideal,guidelines:data.guidelines,signals:[...t.signals],roles:[...t.roles]};
@@ -369,11 +385,54 @@ async function onClick(event){
  }
  if(type==='enrichment-menu'){openDialog('enrichments');return;}
   const views={'today-channel':'todayChannel','today-pool':'todayPool','analytics-scope':'analyticsScope','analytics-tab':'analyticsSection','apps-filter':'apps','agent-channel':'agentChannel','draft-channel':'draftChannel','new-mode':'newMode','thread-view':'threadView'};
-  if(views[type]){ui[views[type]]=d.value;if(type.startsWith('today-'))ui.todayPage=0;if(type==='agent-channel')ui.agentId='';render({keepScroll:type!=='thread-view'});return;}
-  if(type==='thread-folder'){ui.threadFolder=d.value;render();return;}
-  if(type==='thread-gate'){ui.threadGateReveal=ui.threadGateReveal?'':'1';render();return;}
-  if(type==='thread-select'){ui.threadId=d.id;render();return;}
-  if(type==='thread-demo'){notify('Thread is a front-end preview — this action is not wired yet.');return;}
+   if(views[type]){ui[views[type]]=d.value;if(type.startsWith('today-'))ui.todayPage=0;if(type==='agent-channel')ui.agentId='';render({keepScroll:type!=='thread-view'});return;}
+   if(type==='thread-folder'){ui.threadFolder=d.value;render();return;}
+   if(type==='thread-select'){ui.threadId=d.id;render();return;}
+   if(type==='thread-demo'){notify('Campaign builder is still a preview — not wired yet.');return;}
+   if(type==='thread-compose'){ui.threadDraft={mode:'compose',to:[],cc:[],subject:'',bodyHtml:''};ui.threadView='compose';render();return;}
+   if(type==='thread-discard'){ui.threadDraft=null;ui.threadView='inbox';render();return;}
+   if(type==='thread-reply'||type==='thread-reply-all'||type==='thread-forward'){
+    const mode=type==='thread-reply'?'reply':type==='thread-reply-all'?'replyAll':'forward';
+    const draft=draftFromMessage(d.thread,d.message,mode);
+    if(!draft){notify('Conversation unavailable.',true);return;}
+    ui.threadDraft=draft;ui.threadView='compose';ui.threadId=d.thread;render();return;
+   }
+   if(type==='thread-receive'){
+    const t=(workspace().threads||[]).find(x=>x.id===d.thread);if(!t){notify('Conversation unavailable.',true);return;}
+    const se=selfEmail();const other=t.participants.find(p=>p.email&&String(p.email).toLowerCase()!==se)||t.participants[0]||{name:'',email:''};
+    ui.threadDraft={mode:'receive',threadId:t.id,subject:t.subject,to:[other.email],cc:[],from:{name:other.name,email:other.email},bodyHtml:''};
+    ui.threadView='compose';ui.threadId=t.id;render();return;
+   }
+   if(type==='thread-star'){await action('thread-star',{threadId:d.thread,starred:d.value==='true'},{message:false});return;}
+   if(type==='thread-read'){await action('thread-read',{threadId:d.thread,unread:d.value==='true'},{message:false});return;}
+   if(type==='thread-important'){await action('thread-important',{threadId:d.thread,important:d.value==='true'},{message:false});return;}
+   if(type==='thread-move'){await action('thread-move',{threadId:d.thread,folder:d.folder},{message:'Moved to '+d.folder+'.'});return;}
+   if(type==='thread-save-draft'){
+    const f=threadForm(),cur=ui.threadDraft||{};
+    await action('thread-save-draft',{threadId:cur.threadId||undefined,subject:f.subject,to:f.to,cc:f.cc,bodyHtml:f.bodyHtml,leadId:cur.leadId||undefined},
+     {message:'Draft saved.',after:r=>{if(r&&r.thread)ui.threadDraft={...cur,threadId:r.thread};}});
+    return;
+   }
+   if(type==='thread-submit'){
+    const draft=ui.threadDraft||{},f=threadForm();
+    const after=r=>{ui.threadDraft=null;ui.threadView='inbox';if(r&&r.thread)ui.threadId=r.thread;};
+    if(draft.mode==='reply')await action('thread-reply',{threadId:draft.threadId,messageId:draft.messageId,bodyHtml:f.bodyHtml},{message:'Reply sent.',after});
+    else if(draft.mode==='replyAll')await action('thread-reply-all',{threadId:draft.threadId,messageId:draft.messageId,bodyHtml:f.bodyHtml},{message:'Reply sent to all.',after});
+    else if(draft.mode==='forward')await action('thread-forward',{threadId:draft.threadId,messageId:draft.messageId,to:f.to,cc:f.cc,bodyHtml:f.bodyHtml},{message:'Forwarded.',after});
+    else if(draft.mode==='receive')await action('thread-receive',{threadId:draft.threadId,from:draft.from,bodyHtml:f.bodyHtml},{message:'Inbound reply logged.',after});
+    else await action('thread-send',{subject:f.subject,to:f.to,cc:f.cc,bodyHtml:f.bodyHtml,threadId:draft.threadId||undefined,leadId:draft.leadId||undefined},{message:'Sent.',after});
+    return;
+   }
+   if(type==='fmt'){
+    const editor=app.querySelector('.th-edit');if(!editor)return;
+    editor.focus();
+    try{document.execCommand('styleWithCSS',false,false);}catch{}
+    if(d.cmd==='createLink'){const url=prompt('Link URL (https:// or mailto:)');if(url)document.execCommand('createLink',false,url);}
+    else if(d.cmd==='formatBlock')document.execCommand('formatBlock',false,d.value||'blockquote');
+    else document.execCommand(d.cmd,false,null);
+    if(ui.threadDraft)ui.threadDraft.bodyHtml=editor.innerHTML;
+    return;
+   }
  if(type==='page'){ui[d.kind+'Page']=Math.max(0,Number(d.value)||0);render();return;}
  if(type==='cookie'){await action('cookie',{value:d.value});return;}
   if(type==='workspace-select'){await action(type,{workspace:d.id},{after:()=>{menu='';location.hash=go('home');}});return;}
@@ -516,10 +575,12 @@ app.addEventListener('change',async event=>{
  if(d.change==='ltv')await action('lifecycle',{ltv:el.value});
  }catch(error){reportUiError(error);}
 });
-app.addEventListener('input',event=>{
- try{
- const x=event.target,key=x.dataset.input;
- if(x.form?.dataset.form==='import-preview'&&x.name==='paste'){invalidateImport();ui.importPaste=x.value;}
+ app.addEventListener('input',event=>{
+  try{
+  const x=event.target,key=x.dataset.input;
+  if(x.classList.contains('th-edit')){if(ui.threadDraft)ui.threadDraft.bodyHtml=x.innerHTML;return;}
+  if(x.dataset.draft&&ui.threadDraft){ui.threadDraft[x.dataset.draft]=x.value;return;}
+  if(x.form?.dataset.form==='import-preview'&&x.name==='paste'){invalidateImport();ui.importPaste=x.value;}
  if(x.form?.dataset.form==='draft'&&['subject','body'].includes(x.name)){
   const data=values(x.form);
   (ui.draftEdits??={})[data.channel]=data;
@@ -534,8 +595,9 @@ app.addEventListener('input',event=>{
  render({restoreInput:{key,start:x.selectionStart,end:x.selectionEnd}});
  }catch(error){reportUiError(error);}
 });
-app.addEventListener('submit',onSubmit);
-dialog.addEventListener('submit',onSubmit);
+ app.addEventListener('submit',onSubmit);
+ app.addEventListener('mousedown',event=>{if(event.target.closest('.th-fmt'))event.preventDefault();});
+ dialog.addEventListener('submit',onSubmit);
 async function onSubmit(event){
  const f=event.target.closest('form[data-form]');if(!f)return;
  event.preventDefault();
