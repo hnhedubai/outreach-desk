@@ -1,4 +1,5 @@
 import {e,go,link,btn,header,card,empty,table,tr,blankRow,form,field,area,check,select,tabs,stat,bar,note,date,day,money,todayRows,icon,initialOf,glyphStyle,verifyBadge} from './ui.js';
+import {sanitizeHtml,htmlToText} from './sanitize.js';
 const settingsTabs=[['General','settings'],['Team','team'],['Do-not-contact','dnc'],['Usage & limits','usage'],['Audit export','audit']];
 const zones=['Asia/Dubai','Europe/London','Europe/Madrid','Europe/Warsaw','Europe/Berlin','America/New_York','America/Chicago','America/Los_Angeles','Asia/Singapore','Africa/Nairobi','UTC'];
 const zoneField=current=>'<label>Time zone'+select('timezone',[...new Set([current,...zones])],current)+'</label>';
@@ -27,93 +28,121 @@ export function threadTopnav(ui){
  const view=ui.threadView||'inbox';
  return '<span class="th-subnav-label">'+icon('thread')+' Thread</span>'+[['Inbox','inbox'],['Compose','compose'],['Campaigns','campaigns']].map(([label,key])=>'<button type="button" class="th-tab '+(view===key?'on':'')+'" data-action="thread-view" data-value="'+key+'">'+label+'</button>').join('');
 }
-const engClass={opened:'open',clicked:'click',replied:'reply',delivered:'ok',bounced:'bad',held:'warn'};
-function threadDemo(ws){
- const emails=new Set(ws.members.flatMap(m=>[m.email,...(m.contacts||[])]).filter(Boolean).map(x=>String(x).toLowerCase()));
- const real=x=>emails.has(String(x||'').toLowerCase());
- const threads=[
-  {id:'t1',folder:'inbox',from:'Qaisar Ahmed',email:'qaisar@vitalise.io',subj:'Re: Albania pipeline timeline',time:'09:14',unread:true,eng:[['opened','opened 3×'],['clicked','clicked'],['delivered','delivered']],
-   meta:'Qaisar Ahmed <qaisar@vitalise.io> · to you · today 09:14',
-   paras:['Thanks for the note. Before we move forward we need to confirm the interconnection dates for the Albanian side — the current timeline is tight against the Q3 window.','Can you send the revised schedule so I can take it to the team?'],
-   quote:'On Nov 11, you wrote: …we can hold the offtake slot if the grid dates land by end of month…',
-   crm:['Lead · Albania','Deal · ALB-04']},
-  {id:'t2',folder:'inbox',from:'Laëtitia Bernigaud',email:'laetitia.bernigaud@tse.energy',subj:'TSE — press enquiry',time:'08:50',unread:false,eng:[['held','auto-reply']],
-   meta:'Laëtitia Bernigaud <laetitia.bernigaud@tse.energy> · to you · today 08:50',
-   paras:['Hello, thank you for your message. I am currently on leave and will be back on Thursday. For urgent press enquiries, contact Luc Derai (luc.derai@tse.energy).'],
-   crm:['Lead · TSE']},
-  {id:'t3',folder:'inbox',from:'Farhan Iqbal',email:'farhan@grynh2.com',subj:'Intro — e-SAF offtake',time:'Yest',unread:true,eng:[['replied','replied']],
-   meta:'Farhan Iqbal <farhan@grynh2.com> · to you · yesterday 16:02',
-   paras:['They replied — warm. Suggest we schedule a call this week before the pricing window moves.'],
-   crm:['Deal · SAF-02']},
-  {id:'t4',folder:'inbox',from:'Jan A. Ramos · DOE',email:'jramos@energy.gov',subj:'GH2-017 offshore wind',time:'Nov 2',unread:false,eng:[['bounced','bounced · org-policy']],
-   meta:'Delivery status · Jan A. Ramos <jramos@energy.gov>',
-   paras:['Your message to jramos@energy.gov was rejected by the recipient organisation’s mail policy (content filter). No reply is expected on this thread.'],
-   crm:['Lead · DOE']},
-  {id:'t5',folder:'inbox',from:'Saras Energia',email:'info@sarasenergia.com',subj:'Follow-up: hydrogen MoU',time:'Oct 30',unread:false,eng:[['held','catch-all']],
-   meta:'Saras Energia <info@sarasenergia.com> · held from bulk',
-   paras:['This address is on a catch-all domain. Single 1:1 sends are allowed with an explicit override; it stays out of bulk campaigns.'],
-   crm:[]},
-  {id:'t6',folder:'sent',from:'you → Qaisar Ahmed',email:'qaisar@vitalise.io',subj:'Grid dates — revised schedule attached',time:'Nov 11',unread:false,eng:[['opened','opened 2×'],['delivered','delivered']],
-   meta:'You → Qaisar Ahmed <qaisar@vitalise.io> · Nov 11 10:31',
-   paras:['Attaching the revised interconnection schedule for the Albanian side. Key dates are highlighted in the Gantt extract.'],
-   crm:['Deal · ALB-04']},
-  {id:'t7',folder:'drafts',from:'Draft',email:'',subj:'Nordic wind investors — intro',time:'Nov 10',unread:false,eng:[],
-   meta:'Local draft · edited Nov 10',
-   paras:['Draft body — never left this machine.'],
-   crm:[]},
-  {id:'t8',folder:'archive',from:'Farhan Iqbal',email:'farhan@grynh2.com',subj:'Re: portal feedback',time:'Nov 8',unread:false,eng:[['delivered','delivered']],
-   meta:'Farhan Iqbal <farhan@grynh2.com> · Nov 8',
-   paras:['Feedback round closed — archived.'],
-   crm:[]}
- ].map(t=>({...t,real:real(t.email)}));
- const recipients=[
-  {email:'luc.derai@tse.energy',status:'safe'},
-  {email:'farhan@grynh2.com',status:'safe'},
-  {email:'info@sarasenergia.com',status:'catch_all'},
-  {email:'press@cmci-sa.com',status:'unknown'},
-  {email:'old@defunct-grid.io',status:'invalid'}
- ];
- return {threads,recipients};
-}
+const selfEmail=ws=>String(ws.members[0]?.email||'').toLowerCase();
+const thTime=stamp=>{const d=new Date(stamp),n=new Date();return d.toDateString()===n.toDateString()?d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});};
+const findLead=(ws,id)=>{for(const p of ws.projects){const l=p.leads.find(x=>x.id===id);if(l)return{l,p};}return null;};
+const otherParty=(ws,thread)=>{const se=selfEmail(ws);return thread.participants.find(p=>p.email&&String(p.email).toLowerCase()!==se)||thread.participants.find(p=>p.email)||thread.participants[0]||{name:'Unknown',email:''};};
+const threadSnippet=thread=>htmlToText(thread.messages.at(-1)?.bodyHtml||'').slice(0,90);
+const peopleEmails=list=>(list||[]).map(p=>typeof p==='string'?p:p.email).filter(Boolean);
+// Build a quoted trail for reply/reply-all so the original message is visible and editable.
+// Forward is intentionally excluded — the server quotes it (model.mjs thread-forward).
+export const quoteTrail=message=>{
+ const body=message?.bodyHtml;if(!body)return '';
+ const who=String(message.from?.name||message.from?.email||'').trim();
+ const stamp=new Date(message.at);const when=isNaN(+stamp)?'':stamp.toLocaleString('en-CA');
+ const head=when?('On '+e(when)+(who?', '+e(who):'')):e(who||'The sender');
+ return '<p>'+head+' wrote:</p><blockquote>'+sanitizeHtml(body)+'</blockquote>';
+};
+  const fmt=(cmd,label,value,title)=>'<button type="button" class="btn subtle th-fmt" data-action="fmt" data-cmd="'+cmd+'"'+(value?' data-value="'+value+'"':'')+(title?' title="'+e(title)+'" aria-label="'+e(title)+'"':'')+'>'+label+'</button>';
+  // Dropdown command: a leading disabled placeholder keeps it acting as a one-shot button,
+  // and the change handler resets it to the placeholder after applying.
+  const fmtSel=(cmd,title,options)=>'<select class="th-fmt th-fmt-sel" data-action="fmt-change" data-cmd="'+cmd+'" title="'+e(title)+'" aria-label="'+e(title)+'"><option value="" disabled selected>'+e(title)+'</option>'+options.map(([v,l])=>'<option value="'+e(v)+'">'+e(l)+'</option>').join('')+'</select>';
+  const fmtColor=(cmd,label,title,def)=>'<label class="th-fmt th-fmt-color" title="'+e(title)+'" aria-label="'+e(title)+'">'+label+'<input type="color" data-action="fmt-change" data-cmd="'+cmd+'" value="'+e(def||'#000000')+'"></label>';
+  // Signature editor uses the same execCommand engine but a separate action so it never
+  // touches the compose draft. Buttons carry .th-fmt so mousedown keeps the selection alive.
+  const sigFmt=(cmd,label,title)=>'<button type="button" class="btn subtle th-fmt" data-action="sig-fmt" data-cmd="'+cmd+'" title="'+e(title)+'" aria-label="'+e(title)+'">'+label+'</button>';
 function threadPage(ws,ui){
- const d=threadDemo(ws),view=ui.threadView||'inbox';
- return '<div class="thread-wrap">'+(view==='compose'?threadCompose(ws,ui,d):view==='campaigns'?threadCampaigns(ws):threadInbox(ws,ui,d))+'</div>';
+ const view=ui.threadView||'inbox';
+ return '<div class="thread-wrap">'+(view==='compose'?threadCompose(ws,ui):view==='campaigns'?threadCampaigns(ws):threadInbox(ws,ui))+'</div>';
 }
-function threadInbox(ws,ui,d){
- const folder=ui.threadFolder||'inbox';
- const count=k=>k==='inbox'?d.threads.filter(t=>t.folder==='inbox'&&t.unread).length:k==='drafts'?d.threads.filter(t=>t.folder==='drafts').length:k==='all'?d.threads.length:0;
- const folders=[['inbox','▸ Inbox'],['starred','★ Starred'],['sent','⤴ Sent'],['drafts','✎ Drafts'],['important','⚑ Important'],['spam','⚠ Spam'],['all','▤ All Mail'],['archive','▤ Archive'],['trash','🗑 Trash']];
- const rows=d.threads.filter(t=>folder==='all'||t.folder===folder);
- const sel=rows.find(t=>t.id===ui.threadId)||rows.find(t=>t.unread)||rows[0];
- return '<div class="th-panes"><div class="th-folders"><div class="th-compose-row">'+btn('✎ Compose','thread-view','primary',{'data-value':'compose'})+'</div>'+folders.map(([k,label])=>'<a class="th-folder '+(folder===k?'active':'')+'" href="#" data-action="thread-folder" data-value="'+k+'">'+label+(count(k)?'<span class="n">'+count(k)+'</span>':'')+'</a>').join('')+'</div>'+
- '<div class="th-list"><div class="th-list-head">'+btn('All','thread-demo','subtle')+'<span class="count muted">'+rows.length+' shown</span></div>'+
- (rows.length?rows.map(t=>'<div class="th-row'+(t.unread?' unread':'')+(sel&&sel.id===t.id?' active':'')+'" data-action="thread-select" data-id="'+t.id+'"><span class="th-dot'+(t.unread?'':' clear')+'"></span><div class="th-col"><div class="th-row1"><span class="th-from">'+e(t.from)+'</span><span class="th-subj">'+e(t.subj)+'</span><span class="th-time">'+e(t.time)+'</span></div><div class="th-snip">'+e(t.meta)+'</div><div class="th-eng">'+t.eng.map(([k,label])=>'<span class="badge '+engClass[k]+'">'+e(label)+'</span>').join('')+(t.real?'<span class="badge real">workspace contact</span>':'')+'</div></div></div>').join('')
- :'<div class="th-empty">No messages in this folder.</div>')+'</div>'+
- '<div class="th-reader">'+(sel?'<div class="th-reader-head"><h2>'+e(sel.subj)+'</h2><div class="muted small">'+e(sel.meta)+'</div></div>'+
- (sel.crm.length?'<div class="th-crm"><b>CRM match:</b>'+sel.crm.map(x=>'<span class="th-tag">'+e(x)+'</span>').join('')+'<span class="muted small">linked automatically · preview</span></div>':'')+
- '<div class="th-reader-body">'+sel.paras.map(x=>'<p>'+e(x)+'</p>').join('')+(sel.quote?'<div class="th-quote">'+e(sel.quote)+'</div>':'')+'</div>'+
- '<div class="th-reader-actions">'+btn('Reply','thread-demo','primary')+btn('Reply all','thread-demo')+btn('Forward','thread-demo')+btn('✦ AI draft','thread-demo')+'<label class="th-nofollow">'+check('nofollow',ui.threadNoFollow,'',{'data-filter':'threadNoFollow'})+' No follow-up</label></div>'
- :'<div class="th-empty">Nothing to read in this folder.</div>')+'</div></div>';
+function threadInbox(ws,ui){
+ const folder=ui.threadFolder||'inbox',se=selfEmail(ws);
+ const all=ws.threads||[];
+ const query=String(ui.threadQuery||'').trim().toLowerCase();
+ const inFolder=t=>folder==='all'?true:folder==='starred'?t.starred:folder==='important'?t.important:t.folder===folder;
+ const matches=t=>!query||[t.subject,...t.participants.map(p=>(p.name||'')+' '+p.email),...t.messages.map(m=>m.bodyText)].join(' ').toLowerCase().includes(query);
+ const rows=all.filter(t=>inFolder(t)&&matches(t)).sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
+ const count=k=>{const list=k==='all'?all:all.filter(t=>k==='starred'?t.starred:k==='important'?t.important:t.folder===k);return k==='inbox'?list.filter(t=>t.unread).length:list.length;};
+ const folders=[['inbox','▸ Inbox'],['starred','★ Starred'],['important','⚑ Important'],['sent','⤴ Sent'],['drafts','✎ Drafts'],['all','▤ All Mail'],['archive','▤ Archive'],['spam','⚠ Spam'],['trash','🗑 Trash']];
+ const sel=rows.find(t=>t.id===ui.threadId)||rows[0];
+ const row=t=>{const other=otherParty(ws,t);const link=t.leadId?findLead(ws,t.leadId):null;
+  const tags=[...(t.labels||[]).map(x=>'<span class="badge">'+e(x)+'</span>'),link?'<span class="badge real">'+e(link.l.name)+'</span>':'',t.messages.at(-1)?.kind==='auto'?'<span class="badge warn">auto-reply</span>':''].join('');
+  return '<div class="th-row'+(t.unread?' unread':'')+(sel&&sel.id===t.id?' active':'')+'" data-action="thread-select" data-id="'+t.id+'">'+
+   '<button type="button" class="th-star'+(t.starred?' on':'')+'" data-action="thread-star" data-thread="'+t.id+'" data-value="'+(t.starred?'false':'true')+'" aria-label="Star">'+(t.starred?'★':'☆')+'</button>'+
+   '<div class="th-col"><div class="th-row1"><span class="th-from">'+e(other.name||other.email||'—')+'</span><span class="th-subj">'+e(t.subject)+'</span><span class="th-time">'+e(thTime(t.updatedAt))+'</span></div>'+
+   '<div class="th-snip">'+e(threadSnippet(t))+'</div><div class="th-eng">'+tags+'</div></div></div>';};
+ return '<div class="th-panes"><div class="th-folders"><div class="th-compose-row">'+btn('✎ Compose','thread-compose','primary')+'</div>'+
+  folders.map(([k,label])=>'<a class="th-folder '+(folder===k?'active':'')+'" href="#" data-action="thread-folder" data-value="'+k+'">'+label+(count(k)?'<span class="n">'+count(k)+'</span>':'')+'</a>').join('')+'</div>'+
+  '<div class="th-list"><div class="th-list-head"><input class="th-search" type="search" placeholder="Search conversations" aria-label="Search conversations" value="'+e(ui.threadQuery||'')+'" data-input="threadQuery"><span class="count muted">'+rows.length+'</span></div>'+
+  (rows.length?rows.map(row).join(''):'<div class="th-empty">'+(query?'No conversations match your search.':'No messages in this folder.')+'</div>')+'</div>'+
+  '<div class="th-reader">'+(sel?threadReader(ws,ui,sel,se):'<div class="th-empty">Nothing to read in this folder.</div>')+'</div></div>';
 }
-function threadCompose(ws,ui,d){
- const mode=ui.threadMode||'normal';
- const gate={safe:0,catch_all:0,unknown:0,invalid:0};
- d.recipients.forEach(r=>gate[r.status]++);
- const seg=['normal','campaign'].map(k=>'<button type="button" class="'+(mode===k?'on':'')+'" data-action="thread-mode" data-value="'+k+'">'+(k==='normal'?'Normal':'Campaign')+'</button>').join('');
+function threadReader(ws,ui,t,se){
+ const lead=t.leadId?findLead(ws,t.leadId):null;
+ const last=t.messages.at(-1);
+ const msg=m=>{const mine=m.direction==='out';const who=mine?'You':(m.from.name||m.from.email||'—');
+  const recips=[...m.to,...m.cc].map(p=>p.email).filter(Boolean);
+  return '<div class="th-msg'+(mine?' mine':'')+'"><div class="th-msg-head">'+
+   '<span class="th-msg-who">'+e(who)+'</span>'+
+   '<span class="th-msg-mail">'+e(mine?('to '+(recips.join(', ')||'—')):m.from.email)+'</span>'+
+   (m.kind&&m.kind!=='message'?'<span class="badge warn">'+e(m.kind)+'</span>':'')+
+   '<span class="th-msg-time">'+e(thTime(m.at))+'</span>'+
+   '<span class="th-msg-actions">'+btn('Reply','thread-reply','subtle',{'data-thread':t.id,'data-message':m.id})+
+    btn('Reply all','thread-reply-all','subtle',{'data-thread':t.id,'data-message':m.id})+
+    btn('Forward','thread-forward','subtle',{'data-thread':t.id,'data-message':m.id})+'</span></div>'+
+   '<div class="th-msg-body">'+sanitizeHtml(m.bodyHtml||'')+'</div></div>';};
+ return '<div class="th-reader-head"><h2>'+e(t.subject)+'</h2>'+
+  '<div class="th-reader-tools">'+
+   btn(t.starred?'★ Starred':'☆ Star','thread-star','subtle',{'data-thread':t.id,'data-value':t.starred?'false':'true'})+
+   btn(t.important?'⚑ Important':'☆ Important','thread-important','subtle',{'data-thread':t.id,'data-value':t.important?'false':'true'})+
+   btn(t.unread?'Mark read':'Mark unread','thread-read','subtle',{'data-thread':t.id,'data-value':t.unread?'false':'true'})+
+   btn('Archive','thread-move','subtle',{'data-thread':t.id,'data-folder':'archive'})+
+   btn('Spam','thread-move','subtle',{'data-thread':t.id,'data-folder':'spam'})+
+   btn('Trash','thread-move','subtle',{'data-thread':t.id,'data-folder':'trash'})+
+  '</div></div>'+
+  (lead?'<div class="th-crm"><b>CRM match:</b><a class="th-tag" href="'+e(go('lead',lead.p.id,lead.l.id,'channels'))+'">'+e(lead.l.name)+'</a><span class="muted small">linked to this lead</span></div>':'')+
+  (t.labels&&t.labels.length?'<div class="th-labels">'+t.labels.map(x=>'<span class="badge">'+e(x)+'</span>').join('')+'</div>':'')+
+  '<div class="th-reader-body">'+t.messages.map(msg).join('')+'</div>'+
+  '<div class="th-reader-actions">'+btn('Reply','thread-reply','primary',{'data-thread':t.id,'data-message':last.id})+
+   btn('Reply all','thread-reply-all','',{'data-thread':t.id,'data-message':last.id})+
+   btn('Forward','thread-forward','',{'data-thread':t.id,'data-message':last.id})+
+   btn('✎ Log inbound reply','thread-receive','subtle',{'data-thread':t.id})+'</div>';
+}
+function threadCompose(ws,ui){
+ const d=ui.threadDraft||{mode:'compose',to:[],cc:[],subject:'',bodyHtml:''};
+ const self=ws.members[0];
+ const mode=d.mode||'compose';
+ const title={compose:'New message',reply:'Reply',replyAll:'Reply all',forward:'Forward',receive:'Log inbound reply'}[mode]||'New message';
+ const fixed=mode==='reply'||mode==='replyAll';
+ const toVal=peopleEmails(d.to).join(', '),ccVal=peopleEmails(d.cc).join(', ');
+ // Gmail-style space management: From is implied for replies/inbound, so hide its row.
+ const showFrom=mode==='compose'||mode==='forward';
+ // Cc collapses behind an inline toggle; it stays open if it already holds a value.
+ const showCc=!!ui.showCc||!!ccVal;
  return '<div class="th-compose-wrap"><div class="th-compose">'+
- '<div class="th-compose-top"><span class="th-compose-title">New message</span><div class="th-seg">'+seg+'</div></div>'+
- '<div class="th-field"><label>From</label><div class="th-val"><span class="th-chip">'+e(ws.members[0].name)+' &lt;'+e(ws.members[0].email||'you@vitalise.io')+'&gt;</span><span class="muted small">root domain · relay</span></div></div>'+
- '<div class="th-field"><label>To</label><div class="th-val"><div class="th-tochips">'+d.recipients.map(r=>'<span class="th-chip">'+verifyBadge(r.status)+' '+e(r.email)+'</span>').join('')+'<span class="th-chip dashed">+ add</span></div>'+
- '<div class="th-gate">Gate: <b class="ok">✓ '+gate.safe+' safe</b> · <b class="warn">⚠ '+gate.catch_all+' catch-all</b> · <b class="muted">? '+gate.unknown+' unknown</b> · <b class="bad">✕ '+gate.invalid+' invalid</b>'+
- btn('Verify all','thread-gate','subtle')+
- (ui.threadGateReveal&&mode==='normal'?'<span class="muted small"><b class="warn">Catch-all blocked by default.</b> Single email only → <b class="ok">send-anyway override</b> · unknown <b>held</b> · invalid <b>suppressed</b></span>':'')+
- (mode==='campaign'?'<span class="muted small"><b class="bad">Bulk stays strict — no catch-all override.</b></span>':'')+'</div></div></div>'+
- '<div class="th-field"><label>Subject</label><div class="th-val"><input class="th-subject" value="Revised interconnection dates — Albania (ALB-04)" readonly></div></div>'+
- '<div class="th-tools">'+btn('B','thread-demo','subtle')+btn('I','thread-demo','subtle')+btn('🔗','thread-demo','subtle')+btn('✦ AI','thread-demo','subtle')+'<span class="muted small">formal outreach voice</span></div>'+
- '<div class="th-editor">'+area('','body','Dear Qaisar,\n\nThank you for the note. Please find the revised interconnection schedule below…\n\n[ extract the key dates ]',{rows:7,readonly:true})+'</div>'+
- '<div class="th-firewall"><span>⚠</span><div><b>“extract (”</b> may be blocked by the DreamHost outbound firewall (rule 942151).<br><span class="muted">Suggested rewrite: “pull out the key dates”.</span></div></div>'+
- '<div class="th-compose-foot"><span class="th-opt">'+btn('📎 Attach','thread-demo','subtle')+'</span><span class="th-opt">'+check('track',true,'',{disabled:true})+' Track opens/clicks</span><span class="th-opt">'+check('followup',true,'',{disabled:true})+' Follow-up (3–5d)</span><span class="th-send">'+btn('Send','thread-demo','primary disabled',{'aria-disabled':'true'})+'</span></div>'+
- '</div></div>';
+  '<div class="th-compose-top"><span class="th-compose-title">'+e(title)+'</span>'+btn('Discard','thread-discard','subtle')+'</div>'+
+  (showFrom?'<div class="th-field th-from"><label>From</label><div class="th-val"><span class="th-chip">'+e(self.name||'You')+' &lt;'+e(self.email||'you@workspace')+'&gt;</span></div></div>':'')+
+   '<div class="th-field"><label>To</label><div class="th-val"><div class="th-recip"><input class="th-to" data-draft="to" value="'+e(toVal)+'"'+(fixed?' readonly':'')+' placeholder="Recipients, separated by commas" autocomplete="off" spellcheck="false">'+(showCc?'':'<button type="button" class="th-cc-toggle" data-action="thread-cc-toggle" title="Add Cc">Cc</button>')+'</div><div class="th-recip-hint" data-hint="to"></div></div></div>'+
+   (showCc?'<div class="th-field"><label>Cc</label><div class="th-val"><div class="th-recip"><input class="th-cc" data-draft="cc" value="'+e(ccVal)+'"'+(fixed?' readonly':'')+' placeholder="optional" autocomplete="off" spellcheck="false"><button type="button" class="th-cc-toggle" data-action="thread-cc-toggle" title="Remove Cc">✕</button></div><div class="th-recip-hint" data-hint="cc"></div></div></div>':'')+
+  '<div class="th-field"><label>Subject</label><div class="th-val"><input class="th-subject" data-draft="subject" value="'+e(d.subject||'')+'" autocomplete="off" placeholder="Subject"'+(mode==='receive'||mode==='reply'||mode==='replyAll'?' readonly':'')+'></div></div>'+
+   '<div class="th-tools">'+
+    fmtSel('formatBlock','Style',[['p','Normal text'],['h1','Heading 1'],['h2','Heading 2'],['h3','Heading 3'],['blockquote','Quote'],['pre','Code block']])+
+    fmtSel('fontName','Font',[['Arial','Arial'],['Calibri','Calibri'],['Georgia','Georgia'],['Times New Roman','Times New Roman'],['Courier New','Courier New'],['Verdana','Verdana'],['Trebuchet MS','Trebuchet MS']])+
+    fmtSel('fontSize','Size',[['1','Tiny'],['2','Small'],['3','Normal'],['4','Medium'],['5','Large'],['6','X-Large'],['7','XX-Large']])+
+    '<span class="th-sep"></span>'+
+    fmt('bold','<b>B</b>','','Bold')+fmt('italic','<i>I</i>','','Italic')+fmt('underline','<u>U</u>','','Underline')+fmt('strikeThrough','<s>S</s>','','Strikethrough')+
+    '<span class="th-sep"></span>'+
+    fmtColor('foreColor','A','Text colour','#000000')+fmtColor('hiliteColor','AB','Highlight colour','#ffff00')+
+    '<span class="th-sep"></span>'+
+    fmt('insertUnorderedList','•','','Bulleted list')+fmt('insertOrderedList','1.','','Numbered list')+
+    fmt('inlineCode','&lt;/&gt;','','Inline code')+
+    fmt('createLink','🔗','','Insert link')+fmt('insertTable','▦','','Insert table')+
+    '<span class="th-sep"></span>'+
+    fmt('removeFormat','⌫','','Clear formatting')+'</div>'+
+  '<div class="th-editor"><div class="th-edit" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true" data-editor>'+sanitizeHtml(d.bodyHtml||'')+'</div></div>'+
+  '<div class="th-compose-foot">'+btn('Save draft','thread-save-draft','subtle')+
+   '<span class="th-send">'+btn(mode==='receive'?'Log reply':'Send','thread-submit','primary')+'</span></div>'+
+  '</div></div>';
 }
 function threadCampaigns(ws){
  const camps=[
@@ -140,7 +169,24 @@ function threadCampaigns(ws){
  '<div class="th-wiz-actions">'+btn('Save draft','thread-demo')+btn('Preview sample →','thread-demo','primary')+'</div>'+
  '</div></div></div>';
 }
-export function workspacePage(page,ws,ui,state,{webSearch,firecrawlAvailable,jevAvailable,perplexityAvailable,limaAvailable}={}){
+function mailboxCard(mail){
+ const m=mail||{};
+ const status=m.configured
+  ?'<p class="row-gap"><span class="pill ok">✓ Saved · '+e(m.user)+'</span></p>'
+  :'<p class="row-gap"><span class="pill off">Not configured</span></p>';
+ const warn=m.secretAvailable===false?'<p class="notice small">Saving a password needs the <code>OUTREACH_SECRET</code> variable set in the server environment. Host, port and folder can still be saved once it is set.</p>':'';
+ return card('Mailbox (IMAP)',
+  '<p class="muted small">Thread reads inbound mail from this mailbox. Credentials are stored on this computer, encrypted at rest, and the password is never sent back to the browser. Leave the password blank to keep the saved one.</p>'+
+  status+warn+
+  form('mail-settings',
+   field('IMAP host','host',m.host||'imap.dreamhost.com',{autocomplete:'off',spellcheck:'false'})+
+   '<div class="field-row">'+field('Port','port',String(m.port||993),{type:'number',min:'1',max:'65535'})+field('Folder','mailbox',m.mailbox||'INBOX',{autocomplete:'off',spellcheck:'false'})+'</div>'+
+   field('Mailbox address','user',m.user||'',{type:'email',autocomplete:'off',placeholder:'you@yourdomain.com'})+
+   field('Password','password','',{type:'password',autocomplete:'new-password',placeholder:m.configured?'••••••••  leave blank to keep current':'Mailbox password'})+
+   '<label class="flex">'+check('tls',m.tls!==false)+' Use TLS (recommended)</label>','Save mailbox')+
+  '<div class="flex row-gap">'+btn('Test connection','mail-test')+btn('Fetch new mail','mail-fetch','primary')+'</div>');
+}
+export function workspacePage(page,ws,ui,state,{webSearch,firecrawlAvailable,jevAvailable,perplexityAvailable,limaAvailable,mail}={}){
  const member=ws.members[0];
  if(page==='home'){
   if(!ws.projects.length)return onboardingHome(ws);
@@ -173,8 +219,14 @@ export function workspacePage(page,ws,ui,state,{webSearch,firecrawlAvailable,jev
  }
  if(page==='thread')return threadPage(ws,ui);
  let body='';
- if(page==='settings')body=header('Workspace','Name, slug, time zone and owner of this workspace.')+card('Workspace details',form('workspace-settings',field('Name','name',ws.name,{required:true})+field('Slug','slug',ws.id,{disabled:true})+zoneField(ws.timezone)))+
-   '<div class="row-gap">'+card('Workspace owner','<strong>'+e(member.name)+'</strong> <span class="pill">Owner</span>')+'</div>';
+   if(page==='settings')body=header('Workspace','Name, slug, time zone and owner of this workspace.')+card('Workspace details',form('workspace-settings',field('Name','name',ws.name,{required:true})+field('Slug','slug',ws.id,{disabled:true})+zoneField(ws.timezone)))+
+     '<div class="row-gap">'+card('Workspace owner','<strong>'+e(member.name)+'</strong> <span class="pill">Owner</span>')+'</div>'+
+     '<div class="row-gap">'+card('Email signature',
+       '<p class="muted small">Added automatically to the end of every new message. Replies and forwards keep only their quoted text.</p>'+
+       '<div class="th-tools sig-tools">'+sigFmt('bold','<b>B</b>','Bold')+sigFmt('italic','<i>I</i>','Italic')+sigFmt('createLink','🔗','Insert link')+sigFmt('removeFormat','⌫','Clear formatting')+'</div>'+
+       '<div class="sig-edit" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true" data-sig>'+sanitizeHtml(member.signature||'')+'</div>'+
+       '<div class="row-gap">'+btn('Save signature','signature-save','primary')+'</div>')+'</div>'+
+     '<div class="row-gap">'+mailboxCard(mail)+'</div>';
  if(page==='team'){
   const people=ws.members.map(m=>tr([memberAvatar(m)+' <strong>'+e(m.name)+'</strong><small class="subline">'+e(m.email)+'</small>',
    m.role==='Owner'?'<span class="pill">Owner</span>':select('role',['Admin','Agent'],m.role,{'data-change':'member-role','data-member':m.id}),m.role==='Owner'?e(m.status):select('Status',['Pending','Active'],m.status,{'data-change':'member-status','data-member':m.id})]));

@@ -8,11 +8,15 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env server.mjs",
     "reset-password": "node --env-file-if-exists=.env reset-password.mjs",
+    "imap:test": "node --env-file-if-exists=.env scripts/imap-live.mjs",
+    "imap:fetch": "node --env-file-if-exists=.env scripts/imap-live.mjs --no-idle",
     "test": "node --test",
     "verify": "npm run check && npm test",
-    "check": "node --check server.mjs && node --check db.mjs && node --check model.mjs && node --check designation.mjs && node --check jev.mjs && node --check firecrawl.mjs && node --check research-providers.mjs && node --check domain.mjs && node --check auth.mjs && node --check reset-password.mjs && node --check scripts/live-smoke.mjs && node --check public/app.js && node --check public/ui.js && node --check public/eligibility.js && node --check public/project.js && node --check public/workspace.js && node --check public/flow.js && node --check public/spreadsheet.js"
+    "check": "node --check server.mjs && node --check db.mjs && node --check model.mjs && node --check designation.mjs && node --check jev.mjs && node --check firecrawl.mjs && node --check research-providers.mjs && node --check domain.mjs && node --check auth.mjs && node --check imap.mjs && node --check mail-settings.mjs && node --check reset-password.mjs && node --check scripts/live-smoke.mjs && node --check public/app.js && node --check public/ui.js && node --check public/eligibility.js && node --check public/sanitize.js && node --check public/project.js && node --check public/workspace.js && node --check public/flow.js && node --check public/spreadsheet.js"
   },
   "dependencies": {
+    "imapflow": "^2.12.1",
+    "mailparser": "^3.14.5",
     "pg": "^8.23.1"
   }
 }

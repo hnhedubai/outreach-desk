@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 
 import {contactAllowed,handleKey,isSuppressed,suppressionKind} from './public/eligibility.js';
+import {sanitizeHtml,htmlToText} from './public/sanitize.js';
 import {normalizeDesignation} from './designation.mjs';
 
 export const CHANNELS=['Call','Email','Instagram','LinkedIn','SMS','WhatsApp'];
@@ -93,9 +94,46 @@ function makeProject(input,members){
   return {id:id(),name,leads:[],assignments:[],imports:[],searches:[],enrichments:[],history:[],configs,mailboxes:[],agents:members.map(m=>m.id),
     autoAssign:true,split:'Auto-balance',quotas:{},globalCooldown:7,maxLeads:1000,createdAt:now(), targeting:{website:tidy(input.website,350),offer:tidy(input.offer,6000),ideal:tidy(input.ideal,6000),guidelines:'',signals:[],roles:[],a:70,b:40}};
 }
+function seedThreads(ws,p){
+  const self=threadActor(ws);
+  const leadByDomain=domain=>p.leads.find(l=>l.domain===domain);
+  const contactOf=(lead,email)=>({name:lead?.contacts[0]?.name||lead?.name||'',email});
+  const build=(lead,{folder,unread,subject,threadMessages,starred,important})=>{
+    const messages=threadMessages.map(m=>newMessage(m));
+    const participants=uniquePeople([self,...messages.flatMap(m=>[m.from,...m.to,...m.cc])]);
+    const thread={id:id(),subject:tidy(subject,300)||'(no subject)',folder,starred:!!starred,important:!!important,
+      unread:!!unread,labels:[],leadId:lead?.id||'',projectId:lead?p.id:'',participants,
+      messages,createdAt:messages[0].at,updatedAt:messages.at(-1).at};
+    ws.threads.unshift(thread);return thread;
+  };
+  const sonnedix=leadByDomain('sonnedix.com'),axel=contactOf(sonnedix,'axel.thiemann@sonnedix.com');
+  build(sonnedix,{folder:'inbox',unread:true,starred:true,subject:'Re: Nordic wind + solar pipeline',threadMessages:[
+    {direction:'out',from:self,to:[axel],bodyHtml:'<p>Hi Axel,</p><p>We are introducing capital into a Nordic wind and solar pipeline and thought Sonnedix could be a strong partner. Would a short call next week work?</p><p>Best,<br>'+esc(self.name)+'</p>',at:'2026-11-09T08:20:00.000Z'},
+    {direction:'in',from:axel,to:[self],bodyHtml:'<p>Thanks for reaching out. The pipeline sounds interesting — can you share the capacity range and target markets first? cc\u2019ing our BD lead.</p>',at:'2026-11-11T06:05:00.000Z'}
+  ]});
+  const enel=leadByDomain('enelgreenpower.com'),salvatore=contactOf(enel,'salvatore.bernabei@enelgreenpower.com');
+  build(enel,{folder:'sent',subject:'Enel Green Power — partnership intro',threadMessages:[
+    {direction:'out',from:self,to:[salvatore],bodyHtml:'<p>Dear Salvatore,</p><p>I wanted to open a conversation about co-development opportunities in Southern Europe.</p>',at:'2026-11-08T10:00:00.000Z'}
+  ]});
+  build(leadByDomain('mainstreamrp.com'),{folder:'inbox',unread:true,important:true,subject:'Re: Southeast Europe offtake',threadMessages:[
+    {direction:'out',from:self,to:[contactOf(leadByDomain('mainstreamrp.com'),'julie.berg@mainstreamrp.com')],bodyHtml:'<p>Hi Julie,</p><p>Following up on the Southeast Europe offtake discussion — any movement on the interconnection queue?</p>',at:'2026-11-10T09:00:00.000Z'},
+    {direction:'in',from:contactOf(leadByDomain('mainstreamrp.com'),'julie.berg@mainstreamrp.com'),to:[self],bodyHtml:'<p>Auto-reply: I am on leave until Thursday. For urgent matters contact the deals desk.</p>',kind:'auto',at:'2026-11-10T09:30:00.000Z'}
+  ]});
+  build(null,{folder:'drafts',subject:'Investor intro — Q4 pipeline',threadMessages:[
+    {direction:'out',from:self,to:[],bodyHtml:'<p>Draft — never left this machine.</p>',at:'2026-11-10T14:00:00.000Z'}
+  ]});
+}
+export function ensureThreads(ws){
+  if(!Array.isArray(ws.threads))ws.threads=[];
+  if(ws.threadsSeeded)return;
+  ws.threadsSeeded=true;
+  if(ws.threads.length)return;
+  const p=ws.projects.find(x=>Array.isArray(x.leads)&&x.leads.length);
+  if(p)seedThreads(ws,p);
+}
 export function createState(){
   const owner={id:'owner',name:'Mubashir',email:'',role:'Owner',phone:'',timezone:'Asia/Dubai',status:'Active'};
-  const workspace={id:'grynh2',name:'grynh2',timezone:'Asia/Dubai',members:[owner],projects:[],suppressions:[],audit:[],exports:[],cookie:'',searches:0};
+  const workspace={id:'grynh2',name:'grynh2',timezone:'Asia/Dubai',members:[owner],projects:[],suppressions:[],audit:[],exports:[],cookie:'',searches:0,threads:[]};
   const p=makeProject({name:'Wind-Solar-Outreach',website:'grynh2.com',offer:'Investment introductions and partnerships for wind and solar projects.',ideal:'Owners and developers of wind and solar assets seeking investment, joint ventures, co-development, or project sales.'},workspace.members);
   p.id='wind-solar-outreach';
   for(const [name,domain,country,person,profile] of seeded){
@@ -104,6 +142,8 @@ export function createState(){
   }
   workspace.projects.push(p);
   generate(workspace,p,false);
+  seedThreads(workspace,p);
+  workspace.threadsSeeded=true;
   return {revision:0,active:workspace.id,workspaces:[workspace]};
 }
 const defaultCap=(p,ch)=>ch==='Email'?p.mailboxes.filter(m=>m.enabled).reduce((n,m)=>n+m.cap,0):p.configs[ch].cap;
@@ -335,9 +375,76 @@ function importRows(ws,p,input,kind){
 }
 const isRecord=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 
+// --- Thread / conversation helpers (app-internal mail, linked to real leads) ---
+const FOLDERS=new Set(['inbox','sent','drafts','archive','spam','trash']);
+const tidyPerson=value=>{
+  if(typeof value==='string'){const email=normalizeEmail(value);return email?{name:'',email}:null;}
+  if(!isRecord(value))return null;
+  const email=normalizeEmail(value.email);if(!email)return null;
+  return {name:tidy(value.name,140),email};
+};
+const personList=value=>list(value,50).map(tidyPerson).filter(Boolean);
+// Parse an email header string ("Jane Doe <jane@x.com>" or a bare address) into {name,email}.
+function parseAddress(value){
+  const text=String(value??'').trim();if(!text)return {name:'',email:''};
+  const angle=text.match(/^(.*?)<([^>]+)>\s*$/);
+  if(angle)return {name:tidy(angle[1].replace(/^["'\s]+|["'\s]+$/g,''),140),email:normalizeEmail(angle[2])};
+  const email=normalizeEmail(text.split(',')[0]);
+  return {name:email?'':'Unknown',email};
+}
+// Split a comma-separated header into people, dropping address groups without an email.
+function parseAddressList(value){
+  const text=String(value??'').trim();if(!text)return [];
+  const parts=text.split(/,\s*(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+  return uniquePeople(parts.map(parseAddress).filter(p=>p.email)).slice(0,50);
+}
+function uniquePeople(people){
+  const seen=new Set(),out=[];
+  for(const p of people||[]){const key=p.email.toLowerCase();if(seen.has(key))continue;seen.add(key);out.push(p);}
+  return out;
+}
+const emailOf=p=>String(p?.email||'').toLowerCase();
+const withoutSelf=(people,selfEmail)=>people.filter(p=>emailOf(p)!==selfEmail);
+function newMessage({direction,from,to,cc,bodyHtml,kind,inReplyTo}){
+  const html=sanitizeHtml(bodyHtml);
+  return {id:id(),direction,from:tidyPerson(from)||{name:'',email:''},
+    to:uniquePeople(personList(to)),cc:uniquePeople(personList(cc)),
+    bodyHtml:html,bodyText:htmlToText(html).slice(0,8000),
+    at:now(),kind:kind||'message',inReplyTo:inReplyTo||''};
+}
+function leadInWorkspace(ws,leadId){
+  if(!leadId)return null;
+  for(const p of ws.projects){const l=p.leads.find(x=>x.id===leadId);if(l)return{lead:l,project:p};}
+  return null;
+}
+function makeThread(ws,{subject,folder,leadId,participants,first}){
+  const thread={id:id(),subject:tidy(subject,300)||'(no subject)',
+    folder:FOLDERS.has(folder)?folder:'inbox',starred:false,important:false,
+    unread:folder==='inbox',labels:[],
+    leadId:leadId&&leadInWorkspace(ws,leadId)?leadId:'',
+    projectId:leadId&&leadInWorkspace(ws,leadId)?.project.id||'',
+    participants:uniquePeople(participants),messages:[first],createdAt:first.at,updatedAt:first.at};
+  ws.threads.unshift(thread);
+  return thread;
+}
+function touchThread(thread,from,selfEmail){
+  const people=[from,...thread.messages.at(-1).to,...thread.messages.at(-1).cc];
+  thread.participants=uniquePeople([...thread.participants,...people]);
+  thread.updatedAt=now();
+}
+function findMessage(thread,messageId){return thread.messages.find(m=>m.id===messageId)||invalid('Message unavailable.',404);}
+function threadActor(ws){const self=ws.members[0];return{name:tidy(self.name,140),email:normalizeEmail(self.email)};}
+function quoteHtml(message){
+  const when=new Date(message.at).toLocaleString('en-CA');
+  return '<p>On '+esc(when)+', '+esc(message.from.name||message.from.email)+' wrote:</p>'+
+    '<blockquote>'+message.bodyHtml+'</blockquote>';
+}
+function esc(value){return String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
 export function perform(state,type,input={}){
   if(!isRecord(input))invalid('Provide action details as an object.');
   const ws=byId(state.workspaces,input.workspace||state.active,'Workspace unavailable.');
+  ensureThreads(ws);
   if(type==='workspace-select'){state.active=ws.id;return {};}
   const p=input.project?byId(ws.projects,input.project,'Project unavailable.'):null;
   const l=input.lead&&p?byId(p.leads,input.lead,'Lead unavailable.'):null;
@@ -353,7 +460,7 @@ export function perform(state,type,input={}){
       const email=normalizeEmail(isRecord(inv)?inv.email:inv);if(!email||members.some(m=>m.email===email))continue;
       members.push({id:id(),name:email.split('@')[0],email,role:isRecord(inv)&&inv.role==='Admin'?'Admin':'Agent',status:'Pending'});
     }
-    state.workspaces.push({id:key,name,timezone:ws.timezone,members,projects:[],suppressions:[],audit:[],exports:[],cookie:'',searches:0});
+    state.workspaces.push({id:key,name,timezone:ws.timezone,members,projects:[],suppressions:[],audit:[],exports:[],cookie:'',searches:0,threads:[]});
     state.active=key;return {workspace:key};
   }
   if(type==='workspace-settings'||type==='account'){
@@ -364,7 +471,45 @@ export function perform(state,type,input={}){
     else{Object.assign(ws.members[0],{name,timezone:tz,phone:tidy(input.phone,45),email:normalizeEmail(input.email)});}
     return {};
   }
+  if(type==='signature'){
+    // Rich-text signature for the workspace owner, stored as sanitised HTML inside the
+    // single JSON document (no DB column needed). Auto-appended to new messages on compose.
+    const raw=String(input.html??'');
+    if(raw.length>40000)invalid('The signature is too long.');
+    ws.members[0].signature=sanitizeHtml(raw);
+    return {};
+  }
   if(type==='cookie'){ws.cookie=input.value==='accepted'?'accepted':'necessary';return {};}
+  if(type==='thread-ingest'){
+    // Turn fetched IMAP messages into inbox threads. Deduped by RFC Message-ID (falling
+    // back to the IMAP uid) so repeated "Fetch new mail" pulls never duplicate a thread.
+    const known=new Set();
+    for(const t of ws.threads)for(const m of t.messages){if(m.mailMessageId)known.add(m.mailMessageId);if(m.mailUid!==undefined)known.add('uid:'+m.mailUid);}
+    let added=0,updated=0;
+    for(const raw of list(input.messages,100)){
+      if(!isRecord(raw))continue;
+      const from=parseAddress(raw.from);if(!from.email)continue;
+      const to=parseAddressList(raw.to);
+      const key=raw.messageId||('uid:'+(raw.uid??''));
+      if(key&&known.has(key))continue;
+      const bodyHtml=String(raw.html||'').trim()
+        ?String(raw.html)
+        :'<div>'+esc(String(raw.text||'')).replace(/\r?\n/g,'<br>')+'</div>';
+      const message=newMessage({direction:'in',from,to,bodyHtml,kind:'message'});
+      if(raw.messageId)message.mailMessageId=String(raw.messageId).slice(0,500);
+      if(raw.uid!==undefined)message.mailUid=raw.uid;
+      if(raw.date)message.at=tidy(raw.date,40)||message.at;
+      const self=threadActor(ws);
+      const thread=makeThread(ws,{subject:raw.subject||'(no subject)',folder:'inbox',
+        participants:[from,...to,self],first:message});
+      if(message.mailMessageId)known.add(message.mailMessageId);
+      if(message.mailUid!==undefined)known.add('uid:'+message.mailUid);
+      thread.updatedAt=message.at;thread.createdAt=message.at;
+      added++;
+    }
+    return {added,updated};
+  }
+
   if(type==='invite'){
     const email=normalizeEmail(input.email);if(!email)invalid('Enter a valid email address.');
     if(ws.members.some(m=>m.email===email))invalid('That person is already listed.',409);
@@ -384,6 +529,111 @@ export function perform(state,type,input={}){
   }
   if(type==='unsuppress'){
     byId(ws.suppressions,input.id,'Entry unavailable.').removedAt=now();audit(ws,null,'Suppression removed');return {};
+  }
+  if(type==='thread-save-draft'){
+    const self=threadActor(ws);
+    const subject=tidy(input.subject,300);
+    const to=uniquePeople(personList(input.to)),cc=uniquePeople(personList(input.cc));
+    const message=newMessage({direction:'out',from:self,to,cc,bodyHtml:input.bodyHtml});
+    const lead=leadInWorkspace(ws,input.leadId);
+    if(input.threadId){
+      const thread=byId(ws.threads,input.threadId,'Draft unavailable.');
+      if(thread.folder!=='drafts')invalid('That conversation is not a draft.');
+      thread.subject=subject||'(no subject)';
+      thread.messages=[message];
+      thread.leadId=lead?lead.lead.id:thread.leadId;thread.projectId=lead?lead.project.id:thread.projectId;
+      thread.participants=uniquePeople([self,...to,...cc]);thread.updatedAt=now();
+      return {thread:thread.id};
+    }
+    const thread=makeThread(ws,{subject,folder:'drafts',leadId:input.leadId,
+      participants:[self,...to,...cc],first:message});
+    return {thread:thread.id};
+  }
+  if(type==='thread-send'){
+    const self=threadActor(ws);
+    const to=uniquePeople(personList(input.to)),cc=uniquePeople(personList(input.cc));
+    if(!to.length)invalid('Add at least one recipient.');
+    const message=newMessage({direction:'out',from:self,to,cc,bodyHtml:input.bodyHtml});
+    const lead=leadInWorkspace(ws,input.leadId);
+    let thread;
+    if(input.threadId){
+      thread=byId(ws.threads,input.threadId,'Conversation unavailable.');
+      thread.subject=tidy(input.subject,300)||thread.subject;
+      if(thread.folder==='drafts')thread.messages=[message];else thread.messages.push(message);
+      if(lead){thread.leadId=lead.lead.id;thread.projectId=lead.project.id;}
+      touchThread(thread,self);
+    }else{
+      thread=makeThread(ws,{subject:tidy(input.subject,300),folder:'sent',leadId:input.leadId,
+        participants:[self,...to,...cc],first:message});
+    }
+    thread.folder='sent';thread.unread=false;thread.updatedAt=now();
+    audit(ws,null,'Thread sent',{threadId:thread.id,recipients:[...to,...cc].map(p=>p.email)});
+    return {thread:thread.id};
+  }
+  if(type==='thread-reply'||type==='thread-reply-all'){
+    const self=threadActor(ws);
+    const thread=byId(ws.threads,input.threadId,'Conversation unavailable.');
+    const original=findMessage(thread,input.messageId);
+    const to=uniquePeople(withoutSelf([original.from,...original.to],emailOf(self)));
+    const cc=type==='thread-reply-all'?uniquePeople(withoutSelf(original.cc,emailOf(self))):[];
+    if(!to.length&&!cc.length)invalid('There is no one to reply to.');
+    const message=newMessage({direction:'out',from:self,to,cc,bodyHtml:input.bodyHtml,inReplyTo:original.id});
+    thread.messages.push(message);touchThread(thread,self);
+    thread.unread=false;thread.folder=thread.folder==='drafts'?'inbox':thread.folder;
+    audit(ws,null,'Thread reply sent',{threadId:thread.id,all:type==='thread-reply-all'});
+    return {thread:thread.id,messageId:message.id};
+  }
+  if(type==='thread-forward'){
+    const self=threadActor(ws);
+    const thread=byId(ws.threads,input.threadId,'Conversation unavailable.');
+    const original=findMessage(thread,input.messageId);
+    const to=uniquePeople(personList(input.to)),cc=uniquePeople(personList(input.cc));
+    if(!to.length)invalid('Add at least one recipient.');
+    const bodyHtml=sanitizeHtml(input.bodyHtml)+'<hr>'+quoteHtml(original);
+    const message=newMessage({direction:'out',from:self,to,cc,bodyHtml});
+    const forwarded=makeThread(ws,{subject:'Fwd: '+(thread.subject||'(no subject)'),folder:'sent',leadId:thread.leadId,
+      participants:[self,...to,...cc],first:message});
+    audit(ws,null,'Thread forwarded',{threadId:forwarded.id,from:thread.id});
+    return {thread:forwarded.id};
+  }
+  if(type==='thread-receive'){
+    // Record an inbound reply logged inside the app (no external mail sync).
+    const thread=byId(ws.threads,input.threadId,'Conversation unavailable.');
+    const from=tidyPerson(input.from)||thread.participants.find(p=>emailOf(p)!==emailOf(threadActor(ws)))||invalid('Enter the sender.',400);
+    const message=newMessage({direction:'in',from,to:[threadActor(ws)],bodyHtml:input.bodyHtml});
+    thread.messages.push(message);touchThread(thread,from);
+    thread.unread=true;
+    if(thread.folder==='archive'||thread.folder==='trash')thread.folder='inbox';
+    if(thread.leadId){const found=leadInWorkspace(ws,thread.leadId);if(found)found.lead.lifecycle=found.lead.lifecycle==='Prospect'?'Engaged':found.lead.lifecycle;}
+    audit(ws,null,'Inbound reply logged',{threadId:thread.id});
+    return {thread:thread.id,messageId:message.id};
+  }
+  if(type==='thread-read'){
+    const thread=byId(ws.threads,input.threadId,'Conversation unavailable.');
+    thread.unread=!!input.unread;return {};
+  }
+  if(type==='thread-star'){
+    const thread=byId(ws.threads,input.threadId,'Conversation unavailable.');
+    thread.starred=!!input.starred;return {};
+  }
+  if(type==='thread-important'){
+    const thread=byId(ws.threads,input.threadId,'Conversation unavailable.');
+    thread.important=!!input.important;return {};
+  }
+  if(type==='thread-move'){
+    const folder=String(input.folder||'');
+    if(!FOLDERS.has(folder))invalid('Unknown folder.');
+    const thread=byId(ws.threads,input.threadId,'Conversation unavailable.');
+    thread.folder=folder;thread.unread=folder==='inbox'?thread.unread:false;return {};
+  }
+  if(type==='thread-label'){
+    const thread=byId(ws.threads,input.threadId,'Conversation unavailable.');
+    thread.labels=[...new Set(list(input.labels,20).map(x=>tidy(x,60)).filter(Boolean))];return {};
+  }
+  if(type==='thread-delete'){
+    const thread=byId(ws.threads,input.threadId,'Conversation unavailable.');
+    ws.threads=ws.threads.filter(x=>x.id!==thread.id);
+    audit(ws,null,'Thread deleted',{threadId:thread.id});return {};
   }
   if(type==='project-add'){
     if(ws.projects.length>=5)invalid('This workspace has reached its five-project limit.');
@@ -508,6 +758,7 @@ export function perform(state,type,input={}){
      if(handleKey(ch,h.value))addSuppression(ws,h.value,ch,'Erasure request');
     }
     l.contacts=[];l.channels={};l.notes=[];l.drafts={};l.notFit=true;
+    ws.threads=(ws.threads||[]).filter(t=>t.leadId!==l.id);
     delete l.fitReview;
     delete l.jevFit;
     l.description='';l.source='';l.website='https://'+l.domain;l.erasedAt=now();
