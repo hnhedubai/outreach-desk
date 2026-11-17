@@ -11,8 +11,13 @@
 //   IMAP_USER   the full mailbox address, e.g. you@yourdomain.com
 //   IMAP_PASS   the mailbox password (DreamHost: the mail account password)
 //   IMAP_MAILBOX (default INBOX)
-import {ImapFlow} from 'imapflow';
-import {simpleParser} from 'mailparser';
+// imapflow/mailparser are loaded lazily so that merely importing this module
+// (server.mjs does, transitively, on every request) never requires the packages to
+// be installed. CI runs `node --test` with no `npm install` — the same pattern used
+// for pg in db.mjs — so the deps only resolve when a real IMAP call is made.
+let _ImapFlow=null,_simpleParser=null;
+async function imapflowLib(){if(!_ImapFlow)({ImapFlow:_ImapFlow}=await import('imapflow'));return _ImapFlow;}
+async function mailparserLib(){if(!_simpleParser)({simpleParser:_simpleParser}=await import('mailparser'));return _simpleParser;}
 
 const HOST_DEFAULT='imap.dreamhost.com';
 const PORT_DEFAULT=993;
@@ -36,8 +41,9 @@ export function imapConfigured(settings){
   return Boolean(s.user&&s.pass);
 }
 
-function newClient(settings){
+async function newClient(settings){
   const s=resolveSettings(settings);
+  const ImapFlow=await imapflowLib();
   return new ImapFlow({
     host:s.host,
     port:s.port,
@@ -56,6 +62,7 @@ function newClient(settings){
 
 // Turn one fetched message into the compact shape Thread's inbox expects.
 async function normalize(msg) {
+  const simpleParser = await mailparserLib();
   const parsed = msg.source ? await simpleParser(msg.source) : {};
   const text = (parsed.text || '').trim();
   return {
@@ -82,7 +89,7 @@ export async function fetchRecentMail(options = {}) {
   const opts = options || {};
   const limit = Number(opts.limit) || 20;
   const s = resolveSettings(opts);
-  const client = newClient(opts);
+  const client = await newClient(opts);
   try {
     await client.connect();
     await client.mailboxOpen(s.mailbox);
@@ -112,7 +119,7 @@ export function watchMail({onNew, onError, ...settings} = {}) {
 
   const start = async () => {
     if (stopped) return;
-    client = newClient(settings);
+    client = await newClient(settings);
     try {
       await client.connect();
       await client.mailboxOpen(s.mailbox);
