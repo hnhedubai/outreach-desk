@@ -34,7 +34,23 @@ const findLead=(ws,id)=>{for(const p of ws.projects){const l=p.leads.find(x=>x.i
 const otherParty=(ws,thread)=>{const se=selfEmail(ws);return thread.participants.find(p=>p.email&&String(p.email).toLowerCase()!==se)||thread.participants.find(p=>p.email)||thread.participants[0]||{name:'Unknown',email:''};};
 const threadSnippet=thread=>htmlToText(thread.messages.at(-1)?.bodyHtml||'').slice(0,90);
 const peopleEmails=list=>(list||[]).map(p=>typeof p==='string'?p:p.email).filter(Boolean);
-const fmt=(cmd,label,value)=>'<button type="button" class="btn subtle th-fmt" data-action="fmt" data-cmd="'+cmd+'"'+(value?' data-value="'+value+'"':'')+'>'+label+'</button>';
+// Build a quoted trail for reply/reply-all so the original message is visible and editable.
+// Forward is intentionally excluded — the server quotes it (model.mjs thread-forward).
+export const quoteTrail=message=>{
+ const body=message?.bodyHtml;if(!body)return '';
+ const who=String(message.from?.name||message.from?.email||'').trim();
+ const stamp=new Date(message.at);const when=isNaN(+stamp)?'':stamp.toLocaleString('en-CA');
+ const head=when?('On '+e(when)+(who?', '+e(who):'')):e(who||'The sender');
+ return '<p>'+head+' wrote:</p><blockquote>'+sanitizeHtml(body)+'</blockquote>';
+};
+  const fmt=(cmd,label,value,title)=>'<button type="button" class="btn subtle th-fmt" data-action="fmt" data-cmd="'+cmd+'"'+(value?' data-value="'+value+'"':'')+(title?' title="'+e(title)+'" aria-label="'+e(title)+'"':'')+'>'+label+'</button>';
+  // Dropdown command: a leading disabled placeholder keeps it acting as a one-shot button,
+  // and the change handler resets it to the placeholder after applying.
+  const fmtSel=(cmd,title,options)=>'<select class="th-fmt th-fmt-sel" data-action="fmt-change" data-cmd="'+cmd+'" title="'+e(title)+'" aria-label="'+e(title)+'"><option value="" disabled selected>'+e(title)+'</option>'+options.map(([v,l])=>'<option value="'+e(v)+'">'+e(l)+'</option>').join('')+'</select>';
+  const fmtColor=(cmd,label,title,def)=>'<label class="th-fmt th-fmt-color" title="'+e(title)+'" aria-label="'+e(title)+'">'+label+'<input type="color" data-action="fmt-change" data-cmd="'+cmd+'" value="'+e(def||'#000000')+'"></label>';
+  // Signature editor uses the same execCommand engine but a separate action so it never
+  // touches the compose draft. Buttons carry .th-fmt so mousedown keeps the selection alive.
+  const sigFmt=(cmd,label,title)=>'<button type="button" class="btn subtle th-fmt" data-action="sig-fmt" data-cmd="'+cmd+'" title="'+e(title)+'" aria-label="'+e(title)+'">'+label+'</button>';
 function threadPage(ws,ui){
  const view=ui.threadView||'inbox';
  return '<div class="thread-wrap">'+(view==='compose'?threadCompose(ws,ui):view==='campaigns'?threadCampaigns(ws):threadInbox(ws,ui))+'</div>';
@@ -99,18 +115,30 @@ function threadCompose(ws,ui){
  const title={compose:'New message',reply:'Reply',replyAll:'Reply all',forward:'Forward',receive:'Log inbound reply'}[mode]||'New message';
  const fixed=mode==='reply'||mode==='replyAll';
  const toVal=peopleEmails(d.to).join(', '),ccVal=peopleEmails(d.cc).join(', ');
- const noteText=fixed?'<span class="muted small">Recipients are set from the message you are replying to.</span>':
-  mode==='receive'?'<span class="muted small">Records a reply that arrived outside the app — it appears as an inbound message.</span>':
-  '<span class="muted small">Separate addresses with commas.</span>';
+ // Gmail-style space management: From is implied for replies/inbound, so hide its row.
+ const showFrom=mode==='compose'||mode==='forward';
+ // Cc collapses behind an inline toggle; it stays open if it already holds a value.
+ const showCc=!!ui.showCc||!!ccVal;
  return '<div class="th-compose-wrap"><div class="th-compose">'+
   '<div class="th-compose-top"><span class="th-compose-title">'+e(title)+'</span>'+btn('Discard','thread-discard','subtle')+'</div>'+
-  '<div class="th-field"><label>From</label><div class="th-val"><span class="th-chip">'+e(self.name||'You')+' &lt;'+e(self.email||'you@workspace')+'&gt;</span></div></div>'+
-  '<div class="th-field"><label>To</label><div class="th-val"><input class="th-to" data-draft="to" value="'+e(toVal)+'"'+(fixed?' readonly':'')+' placeholder="a@b.com, c@d.com" autocomplete="off" spellcheck="false">'+noteText+'</div></div>'+
-  '<div class="th-field"><label>Cc</label><div class="th-val"><input class="th-cc" data-draft="cc" value="'+e(ccVal)+'"'+(fixed?' readonly':'')+' placeholder="optional" autocomplete="off" spellcheck="false"></div></div>'+
-  '<div class="th-field"><label>Subject</label><div class="th-val"><input class="th-subject" data-draft="subject" value="'+e(d.subject||'')+'" autocomplete="off"'+(mode==='receive'||mode==='reply'||mode==='replyAll'?' readonly':'')+'></div></div>'+
-  '<div class="th-tools">'+fmt('bold','<b>B</b>')+fmt('italic','<i>I</i>')+fmt('underline','<u>U</u>')+
-   fmt('insertUnorderedList','• List')+fmt('insertOrderedList','1. List')+fmt('formatBlock','❝ Quote','blockquote')+fmt('removeFormat','⌫ Clear')+
-   '<span class="muted small">Rich text — stored sanitized</span></div>'+
+  (showFrom?'<div class="th-field th-from"><label>From</label><div class="th-val"><span class="th-chip">'+e(self.name||'You')+' &lt;'+e(self.email||'you@workspace')+'&gt;</span></div></div>':'')+
+   '<div class="th-field"><label>To</label><div class="th-val"><div class="th-recip"><input class="th-to" data-draft="to" value="'+e(toVal)+'"'+(fixed?' readonly':'')+' placeholder="Recipients, separated by commas" autocomplete="off" spellcheck="false">'+(showCc?'':'<button type="button" class="th-cc-toggle" data-action="thread-cc-toggle" title="Add Cc">Cc</button>')+'</div><div class="th-recip-hint" data-hint="to"></div></div></div>'+
+   (showCc?'<div class="th-field"><label>Cc</label><div class="th-val"><div class="th-recip"><input class="th-cc" data-draft="cc" value="'+e(ccVal)+'"'+(fixed?' readonly':'')+' placeholder="optional" autocomplete="off" spellcheck="false"><button type="button" class="th-cc-toggle" data-action="thread-cc-toggle" title="Remove Cc">✕</button></div><div class="th-recip-hint" data-hint="cc"></div></div></div>':'')+
+  '<div class="th-field"><label>Subject</label><div class="th-val"><input class="th-subject" data-draft="subject" value="'+e(d.subject||'')+'" autocomplete="off" placeholder="Subject"'+(mode==='receive'||mode==='reply'||mode==='replyAll'?' readonly':'')+'></div></div>'+
+   '<div class="th-tools">'+
+    fmtSel('formatBlock','Style',[['p','Normal text'],['h1','Heading 1'],['h2','Heading 2'],['h3','Heading 3'],['blockquote','Quote'],['pre','Code block']])+
+    fmtSel('fontName','Font',[['Arial','Arial'],['Calibri','Calibri'],['Georgia','Georgia'],['Times New Roman','Times New Roman'],['Courier New','Courier New'],['Verdana','Verdana'],['Trebuchet MS','Trebuchet MS']])+
+    fmtSel('fontSize','Size',[['1','Tiny'],['2','Small'],['3','Normal'],['4','Medium'],['5','Large'],['6','X-Large'],['7','XX-Large']])+
+    '<span class="th-sep"></span>'+
+    fmt('bold','<b>B</b>','','Bold')+fmt('italic','<i>I</i>','','Italic')+fmt('underline','<u>U</u>','','Underline')+fmt('strikeThrough','<s>S</s>','','Strikethrough')+
+    '<span class="th-sep"></span>'+
+    fmtColor('foreColor','A','Text colour','#000000')+fmtColor('hiliteColor','AB','Highlight colour','#ffff00')+
+    '<span class="th-sep"></span>'+
+    fmt('insertUnorderedList','•','','Bulleted list')+fmt('insertOrderedList','1.','','Numbered list')+
+    fmt('inlineCode','&lt;/&gt;','','Inline code')+
+    fmt('createLink','🔗','','Insert link')+fmt('insertTable','▦','','Insert table')+
+    '<span class="th-sep"></span>'+
+    fmt('removeFormat','⌫','','Clear formatting')+'</div>'+
   '<div class="th-editor"><div class="th-edit" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true" data-editor>'+sanitizeHtml(d.bodyHtml||'')+'</div></div>'+
   '<div class="th-compose-foot">'+btn('Save draft','thread-save-draft','subtle')+
    '<span class="th-send">'+btn(mode==='receive'?'Log reply':'Send','thread-submit','primary')+'</span></div>'+
@@ -141,7 +169,24 @@ function threadCampaigns(ws){
  '<div class="th-wiz-actions">'+btn('Save draft','thread-demo')+btn('Preview sample →','thread-demo','primary')+'</div>'+
  '</div></div></div>';
 }
-export function workspacePage(page,ws,ui,state,{webSearch,firecrawlAvailable,jevAvailable,perplexityAvailable,limaAvailable}={}){
+function mailboxCard(mail){
+ const m=mail||{};
+ const status=m.configured
+  ?'<p class="row-gap"><span class="pill ok">✓ Saved · '+e(m.user)+'</span></p>'
+  :'<p class="row-gap"><span class="pill off">Not configured</span></p>';
+ const warn=m.secretAvailable===false?'<p class="notice small">Saving a password needs the <code>OUTREACH_SECRET</code> variable set in the server environment. Host, port and folder can still be saved once it is set.</p>':'';
+ return card('Mailbox (IMAP)',
+  '<p class="muted small">Thread reads inbound mail from this mailbox. Credentials are stored on this computer, encrypted at rest, and the password is never sent back to the browser. Leave the password blank to keep the saved one.</p>'+
+  status+warn+
+  form('mail-settings',
+   field('IMAP host','host',m.host||'imap.dreamhost.com',{autocomplete:'off',spellcheck:'false'})+
+   '<div class="field-row">'+field('Port','port',String(m.port||993),{type:'number',min:'1',max:'65535'})+field('Folder','mailbox',m.mailbox||'INBOX',{autocomplete:'off',spellcheck:'false'})+'</div>'+
+   field('Mailbox address','user',m.user||'',{type:'email',autocomplete:'off',placeholder:'you@yourdomain.com'})+
+   field('Password','password','',{type:'password',autocomplete:'new-password',placeholder:m.configured?'••••••••  leave blank to keep current':'Mailbox password'})+
+   '<label class="flex">'+check('tls',m.tls!==false)+' Use TLS (recommended)</label>','Save mailbox')+
+  '<div class="flex row-gap">'+btn('Test connection','mail-test')+btn('Fetch new mail','mail-fetch','primary')+'</div>');
+}
+export function workspacePage(page,ws,ui,state,{webSearch,firecrawlAvailable,jevAvailable,perplexityAvailable,limaAvailable,mail}={}){
  const member=ws.members[0];
  if(page==='home'){
   if(!ws.projects.length)return onboardingHome(ws);
@@ -174,8 +219,14 @@ export function workspacePage(page,ws,ui,state,{webSearch,firecrawlAvailable,jev
  }
  if(page==='thread')return threadPage(ws,ui);
  let body='';
- if(page==='settings')body=header('Workspace','Name, slug, time zone and owner of this workspace.')+card('Workspace details',form('workspace-settings',field('Name','name',ws.name,{required:true})+field('Slug','slug',ws.id,{disabled:true})+zoneField(ws.timezone)))+
-   '<div class="row-gap">'+card('Workspace owner','<strong>'+e(member.name)+'</strong> <span class="pill">Owner</span>')+'</div>';
+   if(page==='settings')body=header('Workspace','Name, slug, time zone and owner of this workspace.')+card('Workspace details',form('workspace-settings',field('Name','name',ws.name,{required:true})+field('Slug','slug',ws.id,{disabled:true})+zoneField(ws.timezone)))+
+     '<div class="row-gap">'+card('Workspace owner','<strong>'+e(member.name)+'</strong> <span class="pill">Owner</span>')+'</div>'+
+     '<div class="row-gap">'+card('Email signature',
+       '<p class="muted small">Added automatically to the end of every new message. Replies and forwards keep only their quoted text.</p>'+
+       '<div class="th-tools sig-tools">'+sigFmt('bold','<b>B</b>','Bold')+sigFmt('italic','<i>I</i>','Italic')+sigFmt('createLink','🔗','Insert link')+sigFmt('removeFormat','⌫','Clear formatting')+'</div>'+
+       '<div class="sig-edit" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true" data-sig>'+sanitizeHtml(member.signature||'')+'</div>'+
+       '<div class="row-gap">'+btn('Save signature','signature-save','primary')+'</div>')+'</div>'+
+     '<div class="row-gap">'+mailboxCard(mail)+'</div>';
  if(page==='team'){
   const people=ws.members.map(m=>tr([memberAvatar(m)+' <strong>'+e(m.name)+'</strong><small class="subline">'+e(m.email)+'</small>',
    m.role==='Owner'?'<span class="pill">Owner</span>':select('role',['Admin','Agent'],m.role,{'data-change':'member-role','data-member':m.id}),m.role==='Owner'?e(m.status):select('Status',['Pending','Active'],m.status,{'data-change':'member-status','data-member':m.id})]));

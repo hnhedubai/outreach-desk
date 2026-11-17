@@ -384,6 +384,20 @@ const tidyPerson=value=>{
   return {name:tidy(value.name,140),email};
 };
 const personList=value=>list(value,50).map(tidyPerson).filter(Boolean);
+// Parse an email header string ("Jane Doe <jane@x.com>" or a bare address) into {name,email}.
+function parseAddress(value){
+  const text=String(value??'').trim();if(!text)return {name:'',email:''};
+  const angle=text.match(/^(.*?)<([^>]+)>\s*$/);
+  if(angle)return {name:tidy(angle[1].replace(/^["'\s]+|["'\s]+$/g,''),140),email:normalizeEmail(angle[2])};
+  const email=normalizeEmail(text.split(',')[0]);
+  return {name:email?'':'Unknown',email};
+}
+// Split a comma-separated header into people, dropping address groups without an email.
+function parseAddressList(value){
+  const text=String(value??'').trim();if(!text)return [];
+  const parts=text.split(/,\s*(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+  return uniquePeople(parts.map(parseAddress).filter(p=>p.email)).slice(0,50);
+}
 function uniquePeople(people){
   const seen=new Set(),out=[];
   for(const p of people||[]){const key=p.email.toLowerCase();if(seen.has(key))continue;seen.add(key);out.push(p);}
@@ -457,7 +471,45 @@ export function perform(state,type,input={}){
     else{Object.assign(ws.members[0],{name,timezone:tz,phone:tidy(input.phone,45),email:normalizeEmail(input.email)});}
     return {};
   }
+  if(type==='signature'){
+    // Rich-text signature for the workspace owner, stored as sanitised HTML inside the
+    // single JSON document (no DB column needed). Auto-appended to new messages on compose.
+    const raw=String(input.html??'');
+    if(raw.length>40000)invalid('The signature is too long.');
+    ws.members[0].signature=sanitizeHtml(raw);
+    return {};
+  }
   if(type==='cookie'){ws.cookie=input.value==='accepted'?'accepted':'necessary';return {};}
+  if(type==='thread-ingest'){
+    // Turn fetched IMAP messages into inbox threads. Deduped by RFC Message-ID (falling
+    // back to the IMAP uid) so repeated "Fetch new mail" pulls never duplicate a thread.
+    const known=new Set();
+    for(const t of ws.threads)for(const m of t.messages){if(m.mailMessageId)known.add(m.mailMessageId);if(m.mailUid!==undefined)known.add('uid:'+m.mailUid);}
+    let added=0,updated=0;
+    for(const raw of list(input.messages,100)){
+      if(!isRecord(raw))continue;
+      const from=parseAddress(raw.from);if(!from.email)continue;
+      const to=parseAddressList(raw.to);
+      const key=raw.messageId||('uid:'+(raw.uid??''));
+      if(key&&known.has(key))continue;
+      const bodyHtml=String(raw.html||'').trim()
+        ?String(raw.html)
+        :'<div>'+esc(String(raw.text||'')).replace(/\r?\n/g,'<br>')+'</div>';
+      const message=newMessage({direction:'in',from,to,bodyHtml,kind:'message'});
+      if(raw.messageId)message.mailMessageId=String(raw.messageId).slice(0,500);
+      if(raw.uid!==undefined)message.mailUid=raw.uid;
+      if(raw.date)message.at=tidy(raw.date,40)||message.at;
+      const self=threadActor(ws);
+      const thread=makeThread(ws,{subject:raw.subject||'(no subject)',folder:'inbox',
+        participants:[from,...to,self],first:message});
+      if(message.mailMessageId)known.add(message.mailMessageId);
+      if(message.mailUid!==undefined)known.add('uid:'+message.mailUid);
+      thread.updatedAt=message.at;thread.createdAt=message.at;
+      added++;
+    }
+    return {added,updated};
+  }
+
   if(type==='invite'){
     const email=normalizeEmail(input.email);if(!email)invalid('Enter a valid email address.');
     if(ws.members.some(m=>m.email===email))invalid('That person is already listed.',409);

@@ -9,6 +9,8 @@ import {currentJevFit,jevAvailable,jevInput,scoreWithJev} from './jev.mjs';
 import {firecrawlAvailable,firecrawlSearch} from './firecrawl.mjs';
 import {perplexityAvailable,perplexitySearch,limaAvailable,findLimaEmail,reoonAvailable,verifyReoonEmail,reoonBalance} from './research-providers.mjs';
 import {verifyDomains} from './domain.mjs';
+import {mailSettingsPublic,saveMailSettings,loadMailSettings,assertSafeImapHost} from './mail-settings.mjs';
+import {fetchRecentMail,imapConfigured} from './imap.mjs';
 import {authUsername,clearSessions,createSession,destroySession,ensureAuth,ensureAdminPassword,initSessions,readAuth,sessionFrom,setPassword,verifyPassword} from './auth.mjs';
 export function classifyStreamError(error,req){
  if(error&&error.status)return {status:error.status,message:error.message};
@@ -301,6 +303,53 @@ const server=createServer(async(req,res)=>{
    send(res,200,{ok:true});return;
   }
   if(u.pathname==='/api/state'&&req.method==='GET'){send(res,200,stateResponse(await load()));return;}
+  // Mailbox (IMAP) settings for Thread. The password is stored encrypted in the data dir
+  // and never returned to the browser — only a masked view comes back here.
+  if(u.pathname==='/api/mail'&&req.method==='GET'){send(res,200,await mailSettingsPublic(dataDir));return;}
+  if(u.pathname==='/api/mail/save'){
+    requirePost(req);
+    const input=await body(req,50_000);
+    await saveMailSettings(dataDir,input);
+    send(res,200,{ok:true,settings:await mailSettingsPublic(dataDir)});return;
+  }
+  if(u.pathname==='/api/mail/test'){
+    requirePost(req);await body(req,10_000);
+    const settings=await loadMailSettings(dataDir);
+    if(!settings||!imapConfigured(settings))throw requestError(400,'Save a mailbox address and password first.');
+    await assertSafeImapHost(settings.host); // re-validate before dialing (mail.json could be hand-edited)
+    try{
+      const out=await fetchRecentMail({...settings,limit:5});
+      send(res,200,{ok:true,fetched:out.length,latest:out[0]?{subject:out[0].subject,date:out[0].date}:null});
+    }catch(error){
+      // Log the real upstream detail server-side only; never reflect it to the browser
+      // (it could turn the connect into an internal-service oracle).
+      console.error('IMAP test connection failed:',error.response||error.message||error);
+      throw requestError(502,'Could not connect to the mailbox. Check the host, port and credentials, then try again.');
+    }
+    return;
+  }
+  if(u.pathname==='/api/mail/fetch'){
+    requirePost(req);
+    const input=await body(req,10_000);
+    const settings=await loadMailSettings(dataDir);
+    if(!settings||!imapConfigured(settings))throw requestError(400,'Save a mailbox address and password first.');
+    await assertSafeImapHost(settings.host); // re-validate before dialing (mail.json could be hand-edited)
+    // Check the client's revision BEFORE the (slow) IMAP fetch so a stale request is
+    // rejected without spending a network round-trip; the same loaded state is reused
+    // for the ingest, and the CAS on save still guards against a concurrent write.
+    const state=await load();
+    if(input.revision!==undefined&&input.revision!==state.revision)throw requestError(409,'The workspace changed. Refresh and try again.');
+    let messages;
+    try{messages=await fetchRecentMail({...settings,limit:Math.min(50,Number(input.limit)||20)});}
+    catch(error){
+      console.error('IMAP fetch failed:',error.response||error.message||error);
+      throw requestError(502,'Could not fetch mail. Check the mailbox settings and try again.');
+    }
+    const result=perform(state,'thread-ingest',{workspace:input.workspace,messages});
+    const previous=state.revision;state.revision++;
+    if(!(await store.save(state.revision,encodeState(state),previous)))throw requestError(409,'The workspace changed. Refresh and try again.');
+    send(res,200,stateResponse(state,result));return;
+  }
   if(u.pathname==='/api/import-preview'){
     requirePost(req);
     const input=await body(req,10_000_000),state=await read();

@@ -9,11 +9,52 @@
 // we still escape '>' and leave existing entities (&amp; etc.) untouched to avoid
 // double-encoding what the editor produced.
 
-const ALLOW=new Set(['p','br','b','strong','i','em','u','s','strike','a','ul','ol','li',
-  'blockquote','span','code','pre','div','h1','h2','h3']);
-const VOID=new Set(['br']);
+const ALLOW=new Set(['p','br','hr','b','strong','i','em','u','s','strike','a','ul','ol','li',
+  'blockquote','span','code','pre','div','h1','h2','h3',
+  'table','thead','tbody','tfoot','tr','td','th','caption','font']);
+// hr is emitted by the server when quoting a forwarded message (model.mjs thread-forward),
+// so it must be both allowed and void — otherwise it is dropped and the stack flush appends
+// a stray closing tag.
+const VOID=new Set(['br','hr']);
 const DROP_CONTENT=new Set(['script','style']);
 const SAFE_HREF=/^(?:https?:\/\/[^\s"'<>]+|mailto:[^\s"'<>]+)$/i;
+// Scheme allowlist is not enough: an http/https link to localhost or a private/loopback
+// host can point a recipient at the local app itself or probe the LAN. Block those hosts
+// while leaving any public domain (and mailto) intact. Matched against the lowercased host.
+const PRIVATE_HOST=/(^|\.)(localhost|internal|local\.test|home\.test|localhost\.localdomain)$|\.local$/;
+const PRIVATE_IP=/^(127\.|10\.|192\.168\.|169\.254\.|0\.|172\.(1[6-9]|2\d|3[01])\.)|^(fc|fd)[0-9a-f]{2}:|^[0-9a-f:]*:(1|:)$|^::ffff:(127\.|10\.|192\.168\.|169\.254\.|0\.|172\.(1[6-9]|2\d|3[01])\.)/i;
+// authority = the part after scheme:// and before the first / ? #. The host is after any
+// userinfo (last '@') and, for IPv6, inside brackets with the port outside them.
+function hostOfAuthority(authority){
+  const at=authority.lastIndexOf('@');
+  const hostport=at>=0?authority.slice(at+1):authority;
+  if(hostport.startsWith('[')){
+    const close=hostport.indexOf(']');
+    return close>=0?hostport.slice(1,close):hostport;
+  }
+  const colon=hostport.indexOf(':');
+  return colon>=0?hostport.slice(0,colon):hostport;
+}
+function httpHostPrivate(value){
+  const m=/^https?:\/\/([^\s"'<>]*)/i.exec(value);
+  if(!m)return false;
+  const authority=String(m[1]).split(/[/?#]/)[0];
+  const host=hostOfAuthority(authority).toLowerCase().replace(/\.+$/,'');
+  if(!host)return true;
+  return PRIVATE_HOST.test(host)||PRIVATE_IP.test(host);
+}
+// Inline formatting styles the compose toolbar can produce. Only these properties survive,
+// and only when their value carries none of the risky tokens below (url(), expression(),
+// @import, behavior, protocol schemes, angle brackets). Everything else is dropped.
+const SAFE_STYLE=new Set(['color','background-color','font-family','font-size','font-weight',
+  'font-style','text-decoration','text-align']);
+const RISKY_STYLE=/(url\s*\(|expression\s*\(|javascript:|vbscript:|data:|@|<|>|behavior)/i;
+// Cells may carry colspan/rowspan; sanitised to a small positive integer.
+const SPAN_TAGS=new Set(['td','th','table']);
+// Chromium's execCommand('fontSize') emits legacy <font size="1..7"> even with
+// styleWithCSS on. We keep the tag but translate the size into a safe inline font-size,
+// so the editor's Size control survives the round-trip instead of being stripped.
+const FONT_SIZE={1:'8pt',2:'10pt',3:'12pt',4:'14pt',5:'18pt',6:'24pt',7:'36pt'};
 
 const escapeText=text=>text.replace(/>/g,'&gt;');
 
@@ -21,7 +62,43 @@ function hrefOf(rawAttrs){
   const match=/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(rawAttrs||'');
   if(!match)return '';
   const value=(match[1]??match[2]??match[3]??'').trim();
-  return SAFE_HREF.test(value)?value.replace(/"/g,'&quot;'):'';
+  return SAFE_HREF.test(value)&&!httpHostPrivate(value)?value.replace(/"/g,'&quot;'):'';
+}
+
+// Validate a URL the client is about to insert directly into the editor (createLink) or use
+// as an href, applying the same scheme allowlist and private-host block the stored-body
+// sanitizer enforces. Returns the trimmed value only when its protocol is safe and its host
+// is not localhost/private, otherwise ''. The live editor's innerHTML
+// is only run through sanitizeHtml on save, so without this gate a javascript:/data: URL typed
+// into the link prompt would sit in the contenteditable — and the autosaved draft — clickable
+// in-session before the save-time sanitizer ever strips it (self-XSS).
+export function safeHref(raw){
+  const value=String(raw??'').trim();
+  return SAFE_HREF.test(value)&&!httpHostPrivate(value)?value:'';
+}
+
+// Keep only whitelisted CSS declarations with safe values; return a re-serialised
+// style="..." value (without the attribute wrapper), or '' if nothing qualifies.
+function styleOf(rawAttrs){
+  const match=/\bstyle\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(rawAttrs||'');
+  if(!match)return '';
+  const raw=(match[1]??match[2]??'');
+  const kept=[];
+  for(const decl of raw.split(';')){
+    const colon=decl.indexOf(':');if(colon<0)continue;
+    const prop=decl.slice(0,colon).trim().toLowerCase();
+    const value=decl.slice(colon+1).trim();
+    if(!SAFE_STYLE.has(prop)||!value||RISKY_STYLE.test(value))continue;
+    kept.push(prop+':'+value.replace(/["'<>]/g,''));
+  }
+  return kept.join(';');
+}
+
+function intOf(rawAttrs,name){
+  const match=new RegExp('\\b'+name+'\\s*=\\s*(?:"(\\d+)"|\'(\\d+)\'|(\\d+))','i').exec(rawAttrs||'');
+  if(!match)return '';
+  const n=Number((match[1]??match[2]??match[3]??''));
+  return (n>=1&&n<=50)?String(n):'';
 }
 
 export function sanitizeHtml(input){
@@ -56,7 +133,20 @@ export function sanitizeHtml(input){
     if(name==='a'){
       const href=hrefOf(token);
       out+=href?'<a href="'+href+'">':'<a>';
-    }else out+='<'+name+'>';
+    }else{
+      let attrs='';
+      let style=styleOf(token);
+      if(name==='font'){
+        const px=FONT_SIZE[intOf(token,'size')];
+        if(px&&!/font-size/.test(style))style=(style?style+';':'')+'font-size:'+px;
+      }
+      if(style)attrs+=' style="'+style+'"';
+      if(SPAN_TAGS.has(name)){
+        const cs=intOf(token,'colspan');if(cs)attrs+=' colspan="'+cs+'"';
+        const rs=intOf(token,'rowspan');if(rs)attrs+=' rowspan="'+rs+'"';
+      }
+      out+='<'+name+attrs+'>';
+    }
     stack.push(name);
   }
   while(stack.length)out+='</'+stack.pop()+'>';
@@ -66,8 +156,10 @@ export function sanitizeHtml(input){
 // Plain-text projection for list snippets, search indexing and notifications.
 export function htmlToText(html){
   const safe=sanitizeHtml(html)
-    .replace(/<\/(p|div|li|h[1-3]|blockquote|pre)>/gi,'\n')
+    .replace(/<\/(p|div|li|h[1-3]|blockquote|pre|tr)>/gi,'\n')
+    .replace(/<\/(td|th)>/gi,'\t')
     .replace(/<br\s*\/?>/gi,'\n')
+    .replace(/<hr\s*\/?>/gi,'\n')
     .replace(/<[^>]+>/g,'');
   return safe
     .replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<')

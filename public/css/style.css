@@ -454,27 +454,36 @@ dialog.wizard .btn.primary:hover{background:var(--accent-dark)}
 .th-empty{padding:32px;color:var(--muted);text-align:center}
 .th-compose-wrap{flex:1;min-height:0;overflow:auto;padding:0}
 .th-compose{width:100%;max-width:none;background:var(--paper);border:0;border-radius:0;box-shadow:none;overflow:visible}
-.th-compose-top{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.th-compose-top{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line)}
 .th-compose-title{font-size:16px;font-weight:700}
 .th-seg{margin-left:auto;display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .th-seg button{border:0;background:var(--paper);padding:5px 12px;font-size:12.5px;font-weight:600;color:var(--muted)}
 .th-seg button.on{background:var(--accent);color:#fff}
-.th-field{display:flex;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:flex-start}
-.th-field label{width:56px;color:var(--muted);font-size:13px;padding-top:5px;flex:none}
+.th-field{display:flex;gap:10px;padding:6px 16px;border-bottom:1px solid var(--line-light);align-items:center}
+.th-field label{width:44px;color:var(--muted);font-size:12.5px;flex:none}
 .th-val{flex:1;min-width:0}
+.th-recip{display:flex;align-items:center;gap:8px}
+.th-recip input{flex:1;min-width:0}
+.th-to,.th-cc{border:0;background:transparent;padding:2px 0;font-size:13.5px;color:var(--text)}
+.th-to:focus,.th-cc:focus,.th-subject:focus{outline:none}
+.th-cc-toggle{flex:none;border:0;background:none;color:var(--accent-dark);font-size:12.5px;font-weight:650;cursor:pointer;padding:2px 6px;border-radius:6px}
+.th-cc-toggle:hover{background:var(--canvas)}
 .th-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:16px;padding:4px 10px 4px 8px;font-size:13px;background:var(--canvas)}
 .th-chip.dashed{border-style:dashed;color:var(--muted)}
 .th-gate{margin-top:8px;display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
 .th-gate .ok{color:var(--green)}
 .th-gate .warn{color:var(--warning)}
 .th-gate .bad{color:var(--danger)}
+.th-recip-hint{font-size:12px;margin-top:4px;color:var(--muted)}
+.th-recip-hint.bad{color:var(--danger)}
 .th-subject{width:100%;border:0;padding:0;font-weight:650;font-size:15px}
-.th-tools{display:flex;gap:6px;padding:8px 16px;border-bottom:1px solid var(--line);align-items:center}
+.th-tools{display:flex;gap:4px;padding:5px 16px;border-bottom:1px solid var(--line-light);align-items:center}
+.th-sep{width:1px;height:18px;background:var(--line);margin:0 4px;flex:none}
 .th-tools .muted{margin-left:auto}
 .th-editor{padding:8px 16px}
 .th-editor textarea{width:100%;min-height:150px;background:var(--paper)}
 .th-firewall{margin:8px 16px 12px;background:var(--surface-notice);border:1px solid #e6d3a3;border-radius:8px;padding:9px 12px;font-size:12.5px;display:flex;gap:8px;align-items:flex-start}
-.th-compose-foot{display:flex;align-items:center;gap:14px;padding:12px 16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+.th-compose-foot{display:flex;align-items:center;gap:14px;padding:10px 16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);flex-wrap:wrap}
 .th-opt{display:inline-flex;align-items:center;gap:6px}
 .th-send{margin-left:auto}
 .th-camp{flex:1;min-height:0;overflow:auto;padding:22px 24px}
@@ -527,11 +536,31 @@ dialog.wizard .btn.primary:hover{background:var(--accent-dark)}
 .th-msg-body a{color:var(--accent-dark)}
 .th-compose{display:flex;flex-direction:column;min-height:100%}
 .th-tools{flex-wrap:wrap}
-.th-fmt{min-width:34px;padding:4px 9px;font-size:13px}
+.th-fmt{min-width:30px;padding:3px 7px;font-size:13px}
 .th-editor{padding:8px 16px;flex:1;min-height:150px}
 .th-edit{min-height:150px;border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--paper);line-height:1.6;outline:none;overflow:auto}
 .th-edit:focus{border-color:var(--accent)}
 .th-edit p{margin:0 0 10px}
 .th-edit blockquote{border-left:3px solid var(--line);margin:8px 0;padding:2px 12px;color:var(--muted)}
 .th-edit:empty::before{content:attr(data-placeholder);color:var(--soft)}
+/* Rich-text toolbar controls */
+.th-fmt-sel{height:24px;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:var(--paper);font-size:12.5px;color:var(--text);cursor:pointer}
+.th-fmt-sel:hover{border-color:var(--accent)}
+.th-fmt-color{display:inline-flex;align-items:center;gap:2px;height:24px;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:var(--paper);font-size:12.5px;color:var(--ink);cursor:pointer}
+.th-fmt-color:hover{border-color:var(--accent)}
+.th-fmt-color input[type=color]{width:16px;height:16px;padding:0;border:0;background:none;cursor:pointer}
+/* Rendered rich text inside the editor and inside sent messages */
+.th-edit table,.th-msg-body table{border-collapse:collapse;margin:8px 0;width:auto;max-width:100%}
+.th-edit th,.th-edit td,.th-msg-body th,.th-msg-body td{border:1px solid var(--line);padding:5px 9px;font-size:inherit;text-align:left}
+.th-edit th,.th-msg-body th{background:var(--surface-alt);font-weight:700}
+.th-edit pre,.th-msg-body pre{background:var(--surface-alt);border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-family:ui-monospace,'Cascadia Code','Courier New',monospace;font-size:12.5px;line-height:1.5;white-space:pre-wrap;overflow:auto;margin:8px 0}
+.th-edit code,.th-msg-body code{background:var(--surface-alt);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-family:ui-monospace,'Cascadia Code','Courier New',monospace;font-size:12.5px}
+.th-edit pre code,.th-msg-body pre code{background:none;border:0;padding:0}
+/* Signature editor (Settings) — reuses the .th-fmt button styling above */
+.sig-tools{padding:5px 0;border-bottom:0}
+.sig-edit{min-height:96px;margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--paper);line-height:1.6;outline:none;overflow:auto}
+.sig-edit:focus{border-color:var(--accent)}
+.sig-edit:empty::before{content:'Type your signature…';color:var(--soft)}
+.sig-edit p{margin:0 0 8px}
+.sig-edit a{color:var(--accent-dark)}
 @media(max-width:1100px){.th-panes{flex-direction:column;min-height:640px}.th-folders{flex:none}.th-list{flex:none;max-height:340px}.th-camp-grid{grid-template-columns:1fr}}

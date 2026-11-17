@@ -1,11 +1,12 @@
 import {e,go,link,btn,header,card,empty,form,field,area,check,select,todayRows,channels,icon,labels,menus,worked,ext,initialOf,glyphStyle} from './ui.js';
-import {workspacePage,threadTopnav} from './workspace.js';
+import {workspacePage,threadTopnav,quoteTrail} from './workspace.js';
 import {projectPage} from './project.js';
 import {leadPage,newProjectPage,findPage,importPage,leadFields,personFields} from './flow.js';
 import {parseCsv,parseWorkbook} from './spreadsheet.js';
+import {safeHref} from './sanitize.js';
 
 const app=document.querySelector('#app'),dialog=document.querySelector('#dialog'),toast=document.querySelector('#toast');
-let state,authenticated=false,webSearch=false,jevAvailable=false,firecrawlAvailable=false,perplexityAvailable=false,limaAvailable=false,reoonAvailable=false,ui={},menu='',busy=false,noticeTimer,navCollapsed=false;
+let state,authenticated=false,webSearch=false,jevAvailable=false,firecrawlAvailable=false,perplexityAvailable=false,limaAvailable=false,reoonAvailable=false,mail=null,ui={},menu='',busy=false,noticeTimer,navCollapsed=false;
 const workspace=()=>state.workspaces.find(x=>x.id===state.active)||state.workspaces[0];
 function route(){
  const parts=location.hash.slice(1).split('/').filter(Boolean).map(x=>{try{return decodeURIComponent(x);}catch{return x;}});
@@ -74,7 +75,7 @@ function render({keepScroll=true,restoreInput}={}){
   }
   else if(r.page==='new')content=newProjectPage(r.ws,ui);
   else if(r.p)content=projectPage(r.page,r.ws,r.p,ui);
-  else content=workspacePage(r.page,r.ws,ui,state,{webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable});
+   else content=workspacePage(r.page,r.ws,ui,state,{webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,mail});
   app.innerHTML=shell(r,content||header('Page unavailable','Use the sidebar to continue.'));
   if(keepScroll)app.querySelector('.main').scrollTop=previous;
   app.querySelector('.nav-scroll').scrollTop=side;
@@ -107,7 +108,7 @@ async function request(path,body){
  if(!res.ok)throw Object.assign(new Error(data.error||'Request failed.'),{status:res.status});
  return data;
 }
-async function refresh(){({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable}=await request('/api/state'));}
+async function refresh(){({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable}=await request('/api/state'));try{mail=await request('/api/mail');}catch{mail=null;}}
 async function action(type,input={},options={}){
  if(busy)return;
  const r=route();busy=true;
@@ -256,6 +257,9 @@ function workspaceWizardHtml(){
 const hidden=(name,value)=>'<input type="hidden" name="'+e(name)+'" value="'+e(value)+'">';
 const values=form=>Object.fromEntries(new FormData(form));
 const selfEmail=()=>String(workspace().members[0]?.email||'').toLowerCase();
+// Owner's stored signature (sanitised server-side). Prefilled into brand-new compose
+// bodies only; replies/forwards are built by draftFromMessage and stay untouched.
+const signatureHtml=()=>String(workspace().members[0]?.signature||'');
 const splitRecipients=value=>String(value||'').split(/[,\s;]+/).map(s=>s.trim()).filter(s=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s));
 function threadForm(){
  return {to:splitRecipients(app.querySelector('.th-to')?.value),cc:splitRecipients(app.querySelector('.th-cc')?.value),
@@ -270,8 +274,28 @@ function draftFromMessage(threadId,messageId,mode){
  else if(mode==='replyAll'){push(message.direction==='out'?[...message.to,...message.cc]:[message.from,...message.to,...message.cc],to);}
  const raw=message.subject||thread.subject||'';
  const subject=mode==='forward'?'Fwd: '+(thread.subject||'(no subject)'):(/^(re|fwd):/i.test(raw)?raw:'Re: '+raw);
- return {mode,threadId,messageId:message.id,leadId:thread.leadId||'',to,cc,subject,bodyHtml:''};
+ const quoted=(mode==='reply'||mode==='replyAll')?quoteTrail(message):'';
+ return {mode,threadId,messageId:message.id,leadId:thread.leadId||'',to,cc,subject,bodyHtml:quoted};
 }
+const isEmail=t=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t);
+const splitRaw=value=>String(value||'').split(/[,\s;]+/).map(s=>s.trim()).filter(Boolean);
+const invalidRecips=()=>[...splitRaw(app.querySelector('.th-to')?.value),...splitRaw(app.querySelector('.th-cc')?.value)].filter(t=>!isEmail(t));
+function recipHint(input){
+ const hint=input.closest('.th-val')?.querySelector('.th-recip-hint');if(!hint)return;
+ const bad=splitRaw(input.value).filter(t=>!isEmail(t));
+ if(bad.length){hint.className='th-recip-hint bad';hint.textContent='Not a valid address: '+bad.join(', ');}
+ else{hint.className='th-recip-hint';hint.textContent='';}
+}
+function hasContent(d){if(!d)return false;const text=String(d.bodyHtml||'').replace(/<[^>]*>/g,'').replace(/&nbsp;/gi,' ').trim();return !!(d.to?.length||d.cc?.length||String(d.subject||'').trim()||text);}
+// Autosave: keep the in-progress compose draft in localStorage so an accidental reload or
+// navigating away doesn't lose it. The key is scoped to the active workspace, and only
+// compose-mode drafts are ever restored (via the Compose button) — reply/forward drafts are
+// rebuilt from their thread and must not leak into a fresh "New message".
+const snapKey=()=>'vitalise.composeDraft.v1:'+(state?.active||'');let snapTimer;
+function saveSnapshot(){try{const d=ui.threadDraft;if(d&&d.mode==='compose'&&hasContent(d))localStorage.setItem(snapKey(),JSON.stringify(d));}catch{}}
+function loadSnapshot(){try{const d=JSON.parse(localStorage.getItem(snapKey())||'null');return d&&d.mode==='compose'&&hasContent(d)?d:null;}catch{return null;}}
+function clearSnapshot(){try{localStorage.removeItem(snapKey());}catch{}}
+function queueSnapshot(){clearTimeout(snapTimer);snapTimer=setTimeout(saveSnapshot,800);}
 function targetDraft(data){
  const p=route().p,t=ui.targetDraft||p.targeting;
  return {...t,website:data.website,offer:data.offer,ideal:data.ideal,guidelines:data.guidelines,signals:[...t.signals],roles:[...t.roles]};
@@ -356,6 +380,65 @@ async function searchCompanies(input){
  busy=true;
  try{return (await request('/api/search',input)).rows;}catch(error){notify(error.message,true);return null;}finally{busy=false;}
 }
+// ---- Compose rich-text engine ------------------------------------------------
+// The body is a contenteditable div (.th-edit) whose innerHTML is stored as bodyHtml
+// and run through sanitizeHtml on save, so only tags/attrs the sanitizer allowlists
+// survive. Native <select>/<input type=color> steal focus from the editor, so we keep
+// the last in-editor selection range and restore it before applying each command.
+let savedRange=null;
+function trackEditorSelection(){
+  const sel=window.getSelection();
+  if(!sel||sel.rangeCount===0)return;
+  const editor=app.querySelector('.th-edit');
+  if(editor&&editor.contains(sel.anchorNode))savedRange=sel.getRangeAt(0).cloneRange();
+}
+function restoreEditorSelection(editor){
+  editor.focus();
+  const sel=window.getSelection();
+  if(savedRange&&editor.contains(savedRange.commonAncestorContainer)){
+    sel.removeAllRanges();sel.addRange(savedRange);
+  }
+}
+function insertTable(){
+  const rows=3,cols=3;let html='<table><tbody>';
+  for(let r=0;r<rows;r++){
+    html+='<tr>';
+    for(let c=0;c<cols;c++)html+=(r===0?'<th>Header</th>':'<td>&nbsp;</td>');
+    html+='</tr>';
+  }
+  html+='</tbody></table><p><br></p>';
+  document.execCommand('insertHTML',false,html);
+}
+function applyFormat(cmd,value,editor){
+  editor=editor||app.querySelector('.th-edit');if(!editor)return;
+  const isCompose=editor.classList.contains('th-edit');
+  // Compose relies on the saved range (selects/colour inputs steal focus); the signature
+  // editor only uses buttons, whose mousedown is preventDefault-ed, so its live selection
+  // is already intact — just refocus.
+  if(isCompose)restoreEditorSelection(editor);else editor.focus();
+  // Style-producing commands emit <span style="…"> rather than legacy <font> tags.
+  const css=cmd==='foreColor'||cmd==='hiliteColor'||cmd==='fontName'||cmd==='fontSize';
+  try{document.execCommand('styleWithCSS',false,css);}catch{}
+  if(cmd==='createLink'){
+    const url=prompt('Link URL (https:// or mailto:)');
+    const link=safeHref(url);
+    if(url&&url.trim()&&!link)notify('Only http, https or mailto links are allowed (localhost and private-network addresses are blocked).',true);
+    if(link)document.execCommand('createLink',false,link);
+  }
+  else if(cmd==='formatBlock')document.execCommand('formatBlock',false,value||'blockquote');
+  else if(cmd==='inlineCode'){
+    const sel=window.getSelection(),text=sel&&String(sel);
+    if(text)document.execCommand('insertHTML',false,'<code>'+text.replace(/[&<>]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;'})[ch])+'</code>');
+  }
+  else if(cmd==='insertTable')insertTable();
+  else if(cmd==='fontSize')document.execCommand('fontSize',false,value||'3');
+  else if(cmd==='fontName')document.execCommand('fontName',false,value||'Arial');
+  else if(cmd==='foreColor')document.execCommand('foreColor',false,value);
+  else if(cmd==='hiliteColor'){if(!document.execCommand('hiliteColor',false,value))document.execCommand('backColor',false,value);}
+  else document.execCommand(cmd,false,null);
+  // Only the compose editor autosaves into the draft; the signature persists on Save only.
+  if(isCompose){if(ui.threadDraft)ui.threadDraft.bodyHtml=editor.innerHTML;queueSnapshot();}
+}
 app.addEventListener('click',onClick);
  dialog.addEventListener('click',onClick);
  dialog.addEventListener('input',onDialogInput);
@@ -378,30 +461,55 @@ async function onClick(event){
   if(input){input.type=input.type==='password'?'text':'password';button.textContent=input.type==='password'?'Show':'Hide';}
   return;
  }
- if(type==='logout'){
-  try{await request('/api/auth/logout',{});authenticated=false;state=null;menu='';app.innerHTML=loginPage('You have been signed out.');}
-  catch(error){notify(error.message,true);}
-  return;
- }
+  if(type==='logout'){
+   try{await request('/api/auth/logout',{});authenticated=false;state=null;menu='';app.innerHTML=loginPage('You have been signed out.');}
+   catch(error){notify(error.message,true);}
+   return;
+  }
+  if(type==='mail-test'){
+   if(busy)return;
+   const original=button.textContent;busy=true;button.disabled=true;button.textContent='Testing…';
+   try{
+    const out=await request('/api/mail/test',{});
+    notify(out.fetched?('Connection OK · '+out.fetched+' recent message'+(out.fetched>1?'s':'')+(out.latest?' · newest: '+out.latest.subject:'')):'Connection OK · mailbox is empty.');
+   }catch(error){notify(error.message,true);}
+   finally{busy=false;if(button.isConnected){button.disabled=false;button.textContent=original;}}
+   return;
+  }
+  if(type==='mail-fetch'){
+   if(busy)return;
+   const original=button.textContent;busy=true;button.disabled=true;button.textContent='Fetching…';
+   try{
+    const out=await request('/api/mail/fetch',{workspace:r.ws.id,revision:state.revision});
+    ({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable}=out);
+    const added=(out.result&&out.result.added)||0;
+    ui.threadView='inbox';ui.threadFolder='inbox';
+    render();
+    notify(added?('Imported '+added+' new message'+(added>1?'s':'')+' into Thread.'):'No new mail to import.');
+   }catch(error){notify(error.message,true);}
+   finally{busy=false;if(button.isConnected){button.disabled=false;button.textContent=original;}}
+   return;
+  }
  if(type==='enrichment-menu'){openDialog('enrichments');return;}
   const views={'today-channel':'todayChannel','today-pool':'todayPool','analytics-scope':'analyticsScope','analytics-tab':'analyticsSection','apps-filter':'apps','agent-channel':'agentChannel','draft-channel':'draftChannel','new-mode':'newMode','thread-view':'threadView'};
    if(views[type]){ui[views[type]]=d.value;if(type.startsWith('today-'))ui.todayPage=0;if(type==='agent-channel')ui.agentId='';render({keepScroll:type!=='thread-view'});return;}
    if(type==='thread-folder'){ui.threadFolder=d.value;render();return;}
    if(type==='thread-select'){ui.threadId=d.id;render();return;}
    if(type==='thread-demo'){notify('Campaign builder is still a preview — not wired yet.');return;}
-   if(type==='thread-compose'){ui.threadDraft={mode:'compose',to:[],cc:[],subject:'',bodyHtml:''};ui.threadView='compose';render();return;}
-   if(type==='thread-discard'){ui.threadDraft=null;ui.threadView='inbox';render();return;}
-   if(type==='thread-reply'||type==='thread-reply-all'||type==='thread-forward'){
-    const mode=type==='thread-reply'?'reply':type==='thread-reply-all'?'replyAll':'forward';
-    const draft=draftFromMessage(d.thread,d.message,mode);
-    if(!draft){notify('Conversation unavailable.',true);return;}
-    ui.threadDraft=draft;ui.threadView='compose';ui.threadId=d.thread;render();return;
-   }
+     if(type==='thread-compose'){if(!hasContent(ui.threadDraft))ui.threadDraft=loadSnapshot()||{mode:'compose',to:[],cc:[],subject:'',bodyHtml:signatureHtml()};ui.threadView='compose';render();return;}
+     if(type==='thread-discard'){if(hasContent(ui.threadDraft)&&!confirm('Discard this message? Your text will be lost.'))return;ui.threadDraft=null;clearSnapshot();ui.threadView='inbox';render();return;}
+    if(type==='thread-cc-toggle'){ui.showCc=!ui.showCc;render();return;}
+    if(type==='thread-reply'||type==='thread-reply-all'||type==='thread-forward'){
+     const mode=type==='thread-reply'?'reply':type==='thread-reply-all'?'replyAll':'forward';
+     const draft=draftFromMessage(d.thread,d.message,mode);
+     if(!draft){notify('Conversation unavailable.',true);return;}
+     ui.threadDraft=draft;ui.threadView='compose';ui.threadId=d.thread;saveSnapshot();render();return;
+    }
    if(type==='thread-receive'){
     const t=(workspace().threads||[]).find(x=>x.id===d.thread);if(!t){notify('Conversation unavailable.',true);return;}
     const se=selfEmail();const other=t.participants.find(p=>p.email&&String(p.email).toLowerCase()!==se)||t.participants[0]||{name:'',email:''};
-    ui.threadDraft={mode:'receive',threadId:t.id,subject:t.subject,to:[other.email],cc:[],from:{name:other.name,email:other.email},bodyHtml:''};
-    ui.threadView='compose';ui.threadId=t.id;render();return;
+     ui.threadDraft={mode:'receive',threadId:t.id,subject:t.subject,to:[other.email],cc:[],from:{name:other.name,email:other.email},bodyHtml:''};
+     ui.threadView='compose';ui.threadId=t.id;saveSnapshot();render();return;
    }
    if(type==='thread-star'){await action('thread-star',{threadId:d.thread,starred:d.value==='true'},{message:false});return;}
    if(type==='thread-read'){await action('thread-read',{threadId:d.thread,unread:d.value==='true'},{message:false});return;}
@@ -413,9 +521,11 @@ async function onClick(event){
      {message:'Draft saved.',after:r=>{if(r&&r.thread)ui.threadDraft={...cur,threadId:r.thread};}});
     return;
    }
-   if(type==='thread-submit'){
-    const draft=ui.threadDraft||{},f=threadForm();
-    const after=r=>{ui.threadDraft=null;ui.threadView='inbox';if(r&&r.thread)ui.threadId=r.thread;};
+    if(type==='thread-submit'){
+     const draft=ui.threadDraft||{},f=threadForm();
+     const bad=invalidRecips();
+     if(bad.length){notify('Remove the invalid address'+(bad.length>1?'es':'')+': '+bad.join(', '),true);return;}
+     const after=r=>{ui.threadDraft=null;ui.threadView='inbox';clearSnapshot();if(r&&r.thread)ui.threadId=r.thread;};
     if(draft.mode==='reply')await action('thread-reply',{threadId:draft.threadId,messageId:draft.messageId,bodyHtml:f.bodyHtml},{message:'Reply sent.',after});
     else if(draft.mode==='replyAll')await action('thread-reply-all',{threadId:draft.threadId,messageId:draft.messageId,bodyHtml:f.bodyHtml},{message:'Reply sent to all.',after});
     else if(draft.mode==='forward')await action('thread-forward',{threadId:draft.threadId,messageId:draft.messageId,to:f.to,cc:f.cc,bodyHtml:f.bodyHtml},{message:'Forwarded.',after});
@@ -423,16 +533,12 @@ async function onClick(event){
     else await action('thread-send',{subject:f.subject,to:f.to,cc:f.cc,bodyHtml:f.bodyHtml,threadId:draft.threadId||undefined,leadId:draft.leadId||undefined},{message:'Sent.',after});
     return;
    }
-   if(type==='fmt'){
-    const editor=app.querySelector('.th-edit');if(!editor)return;
-    editor.focus();
-    try{document.execCommand('styleWithCSS',false,false);}catch{}
-    if(d.cmd==='createLink'){const url=prompt('Link URL (https:// or mailto:)');if(url)document.execCommand('createLink',false,url);}
-    else if(d.cmd==='formatBlock')document.execCommand('formatBlock',false,d.value||'blockquote');
-    else document.execCommand(d.cmd,false,null);
-    if(ui.threadDraft)ui.threadDraft.bodyHtml=editor.innerHTML;
-    return;
-   }
+     if(type==='fmt'){applyFormat(d.cmd,d.value);return;}
+     if(type==='sig-fmt'){const ed=app.querySelector('.sig-edit');if(ed)applyFormat(d.cmd,d.value,ed);return;}
+     if(type==='signature-save'){
+       const html=app.querySelector('.sig-edit')?.innerHTML||'';
+       await action('signature',{html},{message:'Signature saved.'});return;
+     }
  if(type==='page'){ui[d.kind+'Page']=Math.max(0,Number(d.value)||0);render();return;}
  if(type==='cookie'){await action('cookie',{value:d.value});return;}
   if(type==='workspace-select'){await action(type,{workspace:d.id},{after:()=>{menu='';location.hash=go('home');}});return;}
@@ -558,7 +664,12 @@ async function onClick(event){
 }
 app.addEventListener('change',async event=>{
  try{
- const el=event.target,d=el.dataset,k=d.filter;
+  const el=event.target,d=el.dataset,k=d.filter;
+  if(d.action==='fmt-change'){
+    const cmd=d.cmd,value=el.value;
+    if(cmd&&value){applyFormat(cmd,value);if(el.tagName==='SELECT')el.selectedIndex=0;}
+    return;
+  }
  if(el.form?.dataset.form==='import-preview'&&el.name==='file'){
   invalidateImport();ui.importFile=el.files[0]||null;
   const fileName=app.querySelector('[data-import-filename]');
@@ -578,8 +689,8 @@ app.addEventListener('change',async event=>{
  app.addEventListener('input',event=>{
   try{
   const x=event.target,key=x.dataset.input;
-  if(x.classList.contains('th-edit')){if(ui.threadDraft)ui.threadDraft.bodyHtml=x.innerHTML;return;}
-  if(x.dataset.draft&&ui.threadDraft){ui.threadDraft[x.dataset.draft]=x.value;return;}
+  if(x.classList.contains('th-edit')){if(ui.threadDraft){ui.threadDraft.bodyHtml=x.innerHTML;queueSnapshot();}return;}
+  if(x.dataset.draft&&ui.threadDraft){ui.threadDraft[x.dataset.draft]=x.value;if(x.dataset.draft==='to'||x.dataset.draft==='cc')recipHint(x);queueSnapshot();return;}
   if(x.form?.dataset.form==='import-preview'&&x.name==='paste'){invalidateImport();ui.importPaste=x.value;}
  if(x.form?.dataset.form==='draft'&&['subject','body'].includes(x.name)){
   const data=values(x.form);
@@ -596,7 +707,8 @@ app.addEventListener('change',async event=>{
  }catch(error){reportUiError(error);}
 });
  app.addEventListener('submit',onSubmit);
- app.addEventListener('mousedown',event=>{if(event.target.closest('.th-fmt'))event.preventDefault();});
+  app.addEventListener('mousedown',event=>{if(event.target.closest('button.th-fmt'))event.preventDefault();});
+  document.addEventListener('selectionchange',()=>{if(app.querySelector('.th-edit'))trackEditorSelection();});
  dialog.addEventListener('submit',onSubmit);
 async function onSubmit(event){
  const f=event.target.closest('form[data-form]');if(!f)return;
@@ -609,12 +721,19 @@ async function onSubmit(event){
   finally{if(submit.isConnected)submit.disabled=false;}
   return;
  }
- if(kind==='password-change'){
-  if(data.newPassword!==data.confirmPassword){notify('New passwords do not match.',true);return;}
-  try{await request('/api/auth/change-password',data);dialog.close();notify('Password changed.');}
-  catch(error){notify(error.message,true);}
-  return;
- }
+  if(kind==='password-change'){
+   if(data.newPassword!==data.confirmPassword){notify('New passwords do not match.',true);return;}
+   try{await request('/api/auth/change-password',data);dialog.close();notify('Password changed.');}
+   catch(error){notify(error.message,true);}
+   return;
+  }
+  if(kind==='mail-settings'){
+   try{
+    const out=await request('/api/mail/save',{host:data.host,port:data.port,user:data.user,mailbox:data.mailbox,password:data.password||'',tls:data.tls==='on'});
+    mail=out.settings;render();notify('Mailbox settings saved.');
+   }catch(error){notify(error.message,true);}
+   return;
+  }
  const r=route();
  if(kind==='audit'){
   if(data.from&&data.to&&data.from>data.to){notify('The start date must be before the end date.',true);return;}
