@@ -113,3 +113,16 @@ test('erasing a lead purges its linked conversations', ()=>{
   perform(s,'erase',{workspace:WS,project:project.id,lead:linked.leadId,confirm:'ERASE'});
   assert.ok(!thread(s,linked.id),'thread removed when its lead is erased');
 });
+
+test('thread-ingest bounds stored threads so the document cannot grow without limit', ()=>{
+  const s=fresh(),ws=wsOf(s);
+  // Each ingest is capped at 100 messages by the reducer, so drive it over many rounds
+  // to exceed the ceiling and confirm pruning kicks in.
+  for(let round=0;round<25;round++){
+    const messages=Array.from({length:100},(_,i)=>{const k=round*100+i;return {from:`x${k}@e.com`,to:'me@vitalise.io',subject:`m${k}`,html:'<p>body</p>',messageId:`<${k}@e.com>`,uid:k};});
+    perform(s,'thread-ingest',{workspace:WS,messages});
+  }
+  assert.ok(ws.threads.length<=2000,`thread count is capped (got ${ws.threads.length})`);
+  assert.ok(ws.threads.some(t=>t.folder==='sent'),'user-owned sent thread survives the prune');
+  assert.ok(ws.threads.some(t=>t.starred),'starred thread survives the prune');
+});

@@ -40,6 +40,19 @@ test('a saved password is encrypted at rest and never appears in the file or the
   });
 });
 
+test('the mailbox records the workspace it is bound to, for deterministic live intake',async()=>{
+  const dir=await tmp();
+  await withEnv({OUTREACH_SECRET:SECRET},async()=>{
+    try{
+      await saveMailSettings(dir,{host:'8.8.8.8',user:'me@example.com',password:'p',workspace:'grynh2'});
+      assert.equal((await loadMailSettings(dir)).workspace,'grynh2','loadMailSettings surfaces the bound workspace');
+      assert.equal((await mailSettingsPublic(dir)).workspace,'grynh2','the public view carries the bound workspace');
+      await saveMailSettings(dir,{host:'8.8.8.8',user:'me@example.com',password:'p'});
+      assert.equal((await loadMailSettings(dir)).workspace,'','omitting workspace clears the binding');
+    }finally{await rm(dir,{recursive:true,force:true});}
+  });
+});
+
 test('re-saving with a blank password keeps the stored one; a new password re-seals',async()=>{
   const dir=await tmp();
   await withEnv({OUTREACH_SECRET:SECRET},async()=>{
