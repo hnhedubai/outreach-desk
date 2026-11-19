@@ -1,5 +1,5 @@
 import {e,go,link,btn,header,card,empty,form,field,area,check,select,todayRows,channels,icon,labels,menus,worked,ext,initialOf,glyphStyle} from './ui.js';
-import {workspacePage,threadTopnav,quoteTrail} from './workspace.js';
+import {workspacePage,quoteTrail} from './workspace.js';
 import {projectPage} from './project.js';
 import {leadPage,newProjectPage,findPage,importPage,leadFields,personFields} from './flow.js';
 import {parseCsv,parseWorkbook} from './spreadsheet.js';
@@ -9,11 +9,29 @@ const app=document.querySelector('#app'),dialog=document.querySelector('#dialog'
 let state,authenticated=false,webSearch=false,jevAvailable=false,firecrawlAvailable=false,perplexityAvailable=false,limaAvailable=false,reoonAvailable=false,mail=null,ui={},menu='',busy=false,noticeTimer,navCollapsed=false;
 const workspace=()=>state.workspaces.find(x=>x.id===state.active)||state.workspaces[0];
 function route(){
- const parts=location.hash.slice(1).split('/').filter(Boolean).map(x=>{try{return decodeURIComponent(x);}catch{return x;}});
+ const parts=location.pathname.split('/').filter(Boolean).map(x=>{try{return decodeURIComponent(x);}catch{return x;}});
  const ws=workspace(),hasProject=parts[0]==='p',p=hasProject?ws.projects.find(x=>x.id===parts[1]):null;
  const page=(hasProject?parts[2]:parts[0])||'home';
  const lead=page==='lead'&&p?p.leads.find(l=>l.id===parts[3]):null;
  return {ws,p,page,lead,tab:parts[4]||'channels',badProject:hasProject&&!p};
+}
+// Client-side routing over the History API. navigate() pushes a real path (no '#') and
+// re-renders; onLocationChange() resets per-route UI and is shared by navigate() and the
+// popstate handler (back/forward). Keeping it in one place mirrors the old hashchange flow.
+function onLocationChange(){
+ const r=route(),keepImport=r.page==='import';
+ const prior=ui;ui=keepImport?{importOpen:prior.importOpen}:{};menu='';
+ // Entering Thread folds the left nav to the icon rail so the mail panes get width.
+ if(r.page==='thread')navCollapsed=true;
+ if(dialog.open)dialog.close();
+ render({keepScroll:false});
+}
+function navigate(path){
+ const target=String(path||'').split('#')[0];
+ if(!target||target==='/')return;
+ if(location.pathname===target)return;
+ history.pushState({},'',target);
+ onLocationChange();
 }
 const person=ws=>ws.members[0];
 const labelOf=r=>r.page==='lead'?r.lead?.name||'Lead':r.page==='thread'?'':labels[r.page]||({home:'Home',team:'Team',thread:'Thread',dnc:'Do-not-contact',settings:'Settings',usage:'Usage & limits',audit:'Audit export',apps:'Apps',new:'New project',account:'Account settings',agent:'Agent mode'})[r.page]||'Home';
@@ -33,10 +51,10 @@ function shell(r,body){
  const actions=p&&page!=='agent'?'<button type="button" class="btn notify" data-action="enrichment-menu"><span class="enriched-check" aria-hidden="true">✓</span>Enriched <span>'+p.enrichments.length+'</span></button><a class="btn primary agent-entry" href="'+go('agent',p.id)+'">Agent mode <span class="agent-count">'+n+' mine</span></a>':'';
  return '<div class="shell'+(navCollapsed?' collapsed':'')+'"><div class="brand-head"><button type="button" class="brand" data-action="menu" data-value="workspace" aria-expanded="'+(menu==='workspace')+'"><span class="logo"><img class="logo-img" src="/icon-192.png" alt="" width="28" height="28"></span>'+'<span class="brand-name">'+e(ws.name)+'</span>'+icon('down')+'</button>'+workspaceMenu+'</div>'+
  '<header class="topbar"><div class="crumb">'+btn('☰','mobile-menu','subtle',{id:'menu-toggle','aria-label':navCollapsed?'Expand navigation':'Collapse navigation',title:navCollapsed?'Expand navigation':'Collapse navigation'})+
- (page==='thread'?threadTopnav(ui):link(ws.name,go('home'),'')+' <span>/</span> '+(p?link(p.name,go('overview',p.id),'')+' <span>/</span> ':'')+e(labelOf(r)))+'</div><div class="head-actions">'+actions+'</div></header>'+
+  (page==='thread'?'':link(ws.name,go('home'),'')+' <span>/</span> '+(p?link(p.name,go('overview',p.id),'')+' <span>/</span> ':'')+e(labelOf(r)))+'</div><div class="head-actions">'+actions+'</div></header>'+
  '<aside class="sidebar '+(ui.mobile?'open':'')+'"><nav class="nav-scroll" aria-label="Main navigation">'+wsItems.map(([name,key])=>nav(name,key,go(key),!p&&(page===key||(key==='settings'&&['usage','audit'].includes(page))))).join('')+
  '<div class="nav-label">Projects</div>'+projectNav(ws,p)+nav('+ New project','plus',go('new'),page==='new')+'</nav>'+
- '<button class="account" data-action="menu" data-value="account" aria-expanded="'+(menu==='account')+'"><span class="avatar"><span class="glyph" style="'+glyphStyle(initialOf(me.name))+'">'+e(initialOf(me.name))+'</span></span><span><b>'+e(me.name)+'</b><br><small class="muted">'+e(me.role)+'</small></span><span class="dots">···</span></button>'+accountMenu+'</aside>'+
+ '<button class="account" data-action="menu" data-value="account" aria-expanded="'+(menu==='account')+'"><span class="avatar"><span class="glyph" style="'+glyphStyle(initialOf(me.name))+'">'+e(initialOf(me.name))+'</span></span><span class="account-meta"><b>'+e(me.name)+'</b><small class="muted">'+e(me.role)+'</small></span><span class="dots">···</span></button>'+accountMenu+'</aside>'+
  '<main class="main page-'+e(page)+'" id="main"><div class="wrap">'+body+'</div></main></div>';
 }
 const renderErrorMessage='Something went wrong. Reload the page.';
@@ -439,18 +457,62 @@ function applyFormat(cmd,value,editor){
   // Only the compose editor autosaves into the draft; the signature persists on Save only.
   if(isCompose){if(ui.threadDraft)ui.threadDraft.bodyHtml=editor.innerHTML;queueSnapshot();}
 }
-app.addEventListener('click',onClick);
+ app.addEventListener('click',onClick);
  dialog.addEventListener('click',onClick);
  dialog.addEventListener('input',onDialogInput);
-async function onClick(event){
- try{
- const a=event.target.closest('a[href^="#/"]');
- if(a&&dialog.open)dialog.close();
- const button=event.target.closest('button[data-action]');
+ // Thread pane resizing: drag the divider between folders / list / reader, or
+ // focus it and use arrow keys. Widths persist in localStorage and are read back
+ // by workspace.js on every render, so they survive re-renders and reloads.
+ const TH_LIMITS={folders:{min:160,max:440,key:'thFoldersW'},list:{min:220,max:680,key:'thListW'}};
+ const thClamp=(lim,w)=>Math.min(lim.max,Math.max(lim.min,Math.round(w)));
+ function onResizeDown(event){
+   if(event.button!==0)return;
+   const handle=event.target.closest('.th-resizer');if(!handle)return;
+   const which=handle.dataset.resize,lim=TH_LIMITS[which];if(!lim)return;
+   const pane=handle.previousElementSibling;if(!pane)return;
+   event.preventDefault();
+   const startX=event.clientX,startW=pane.getBoundingClientRect().width;
+   handle.classList.add('dragging');document.body.classList.add('th-resizing');
+   const move=e=>{pane.style.flexBasis=thClamp(lim,startW+(e.clientX-startX))+'px';};
+   const up=e=>{document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up);handle.classList.remove('dragging');document.body.classList.remove('th-resizing');const w=thClamp(lim,startW+(e.clientX-startX));pane.style.flexBasis=w+'px';try{localStorage.setItem('vitalise.'+lim.key,String(w));}catch{}};
+   document.addEventListener('mousemove',move);document.addEventListener('mouseup',up);
+ }
+ function onResizeKey(event){
+   const handle=event.target.closest('.th-resizer');if(!handle)return;
+   const which=handle.dataset.resize,lim=TH_LIMITS[which];if(!lim)return;
+   const pane=handle.previousElementSibling;if(!pane)return;
+   const cur=pane.getBoundingClientRect().width,step=event.shiftKey?40:12;
+   let w=null;
+   if(event.key==='ArrowRight')w=cur+step;else if(event.key==='ArrowLeft')w=cur-step;else if(event.key==='Home')w=lim.min;else if(event.key==='End')w=lim.max;
+   if(w===null)return;
+   event.preventDefault();
+   const v=thClamp(lim,w);pane.style.flexBasis=v+'px';try{localStorage.setItem('vitalise.'+lim.key,String(v));}catch{}
+ }
+ app.addEventListener('mousedown',onResizeDown);
+ app.addEventListener('keydown',onResizeKey);
+ async function onClick(event){
+  try{
+   // Click-outside dismiss: if a dropdown menu is open and the click lands outside
+   // the menu and its trigger, close the menu and swallow this click (standard
+   // "first click dismisses" behaviour). The trigger and Escape still work as before.
+   if(menu&&!event.target.closest('.dropdown')&&!event.target.closest('[data-action="menu"]')){menu='';render();return;}
+   // Internal SPA links now point at real paths. Intercept plain left-clicks on same-origin
+  // path links and route them through the History API; leave new-tab (target), download,
+  // modifier-clicks and non-path links (mailto:, tel:, external, '#') to the browser.
+  const link=event.target.closest('a[href^="/"]');
+  if(link&&!link.target&&!link.hasAttribute('download')&&event.button===0&&!event.metaKey&&!event.ctrlKey&&!event.shiftKey&&!event.altKey){
+   if(dialog.open)dialog.close();
+   event.preventDefault();navigate(link.getAttribute('href'));return;
+  }
+ const button=event.target.closest('[data-action]');
  if(!button){
-  const row=event.target.closest('tr[data-open]');if(row&&!event.target.closest('a,input,button,select'))location.hash=row.dataset.open;
+   const row=event.target.closest('tr[data-open]');if(row&&!event.target.closest('a,input,button,select'))navigate(row.dataset.open);
   return;
  }
+ // Folder links and conversation rows are anchors/divs that carry data-action but have no
+ // button default; the folder's href="#" would otherwise clear the hash and drop to the
+ // dashboard, so suppress the anchor default and let the action keep the module focused.
+ if(button.tagName==='A')event.preventDefault();
  const d=button.dataset,type=d.action,r=route(),p=r.p,l=r.lead;
  if(type==='menu'){menu=menu===d.value?'':d.value;render();return;}
   if(type==='mobile-menu'){if(matchMedia('(max-width:620px)').matches)ui.mobile=!ui.mobile;else navCollapsed=!navCollapsed;render();return;}
@@ -541,11 +603,11 @@ async function onClick(event){
      }
  if(type==='page'){ui[d.kind+'Page']=Math.max(0,Number(d.value)||0);render();return;}
  if(type==='cookie'){await action('cookie',{value:d.value});return;}
-  if(type==='workspace-select'){await action(type,{workspace:d.id},{after:()=>{menu='';location.hash=go('home');}});return;}
+  if(type==='workspace-select'){await action(type,{workspace:d.id},{after:()=>{menu='';navigate(go('home'));}});return;}
    if(type==='ws-invite-another'){const w=ui.wsWizard||{};w.invites=collectInviteRows();w.invites.push({email:'',role:'Agent'});openDialog('workspace-add');return;}
    if(type==='ws-invite-remove'){const w=ui.wsWizard||{};w.invites=collectInviteRows();w.invites.splice(Number(d.index),1);if(!w.invites.length)w.invites=[{email:'',role:'Agent'}];openDialog('workspace-add');return;}
    if(type==='ws-skip'){await createWorkspaceFromWizard([]);return;}
-   if(type==='onboard-start'){ui.newMode=d.value;location.hash=go('new');return;}
+   if(type==='onboard-start'){ui.newMode=d.value;navigate(go('new'));return;}
  if(type==='worklist'){await action(type,{replace:d.replace==='true'},{message:d.replace==='true'?'Worklist regenerated.':'Worklist topped up.'});return;}
  if(type==='mark'||type==='lead-mark'){await action(type,{assignment:d.id,channel:d.channel,mark:d.mark},{message:d.mark+' recorded.'});return;}
  if(type==='fit'){await action(type,{value:d.value==='true'});return;}
@@ -605,11 +667,11 @@ async function onClick(event){
  if(type==='enrich-firecrawl'||type==='enrich-perplexity'){
   const provider=type==='enrich-firecrawl'?'firecrawl':'perplexity';
   if(busy||!l||l.erasedAt||!(provider==='firecrawl'?firecrawlAvailable:perplexityAvailable))return;
-  const href=location.hash,view=ui;
+  const href=location.pathname,view=ui;
   button.disabled=true;
   try{
    const rows=await searchCompanies({workspace:r.ws.id,project:p.id,lead:l.id,source:provider});
-   if(!rows||href!==location.hash||view!==ui)return;
+   if(!rows||href!==location.pathname||view!==ui)return;
    const row=rows[0];
    if(row)openDialog('research-review',{...row,provider});
    else notify('No usable findings on '+l.domain+'.',true);
@@ -618,11 +680,11 @@ async function onClick(event){
  }
  if(type==='lima-email'){
   if(busy||!limaAvailable||!l||l.erasedAt)return;
-  const href=location.hash,view=ui;
+  const href=location.pathname,view=ui;
   button.disabled=true;busy=true;
   try{
    const result=await request('/api/contact-email',{workspace:r.ws.id,project:p.id,lead:l.id,contact:d.id});
-   if(href!==location.hash||view!==ui)return;
+   if(href!==location.pathname||view!==ui)return;
    if(result.outcome==='match'&&result.email)openDialog('lima-review',result);
    else notify(result.message||'LimaData returned no usable work email.',true);
    }catch(error){notify(error.message,true);}
@@ -631,13 +693,13 @@ async function onClick(event){
   }
   if(type==='verify-email'||type==='verify-account'){
    if(busy||!reoonAvailable||!l||l.erasedAt)return;
-   const href=location.hash,view=ui;
+   const href=location.pathname,view=ui;
    button.disabled=true;busy=true;
    try{
     const body={workspace:r.ws.id,project:p.id,lead:l.id,revision:state.revision};
     if(type==='verify-email')body.contact=d.id;
     const out=await request('/api/verify-emails',body);
-    if(href!==location.hash||view!==ui)return;
+    if(href!==location.pathname||view!==ui)return;
     ({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable}=out);
     render();
     const res=out.result||{};
@@ -716,7 +778,7 @@ async function onSubmit(event){
  const kind=f.dataset.form,data=values(f);
  if(kind==='login'){
   const submit=f.querySelector('button[type="submit"]');submit.disabled=true;
-  try{await request('/api/auth/login',{username:data.username,password:data.password});authenticated=true;await refresh();if(!location.hash)history.replaceState(null,'',workspace().projects[0]?go('today',workspace().projects[0].id):go('home'));render({keepScroll:false});}
+  try{await request('/api/auth/login',{username:data.username,password:data.password});authenticated=true;await refresh();if(location.pathname==='/')history.replaceState(null,'',workspace().projects[0]?go('today',workspace().projects[0].id):go('home'));render({keepScroll:false});}
   catch(error){app.innerHTML=loginPage(error.message);}
   finally{if(submit.isConnected)submit.disabled=false;}
   return;
@@ -742,7 +804,7 @@ async function onSubmit(event){
  }
  if(kind==='project-add'){
   const destination=ui.newMode==='find'?'find':'import';
-  await action(kind,data,{after:result=>{location.hash=go(destination,result.project);}});return;
+   await action(kind,data,{after:result=>{navigate(go(destination,result.project));}});return;
  }
   if(kind==='workspace-add-step1'){
    const name=(data.name||'').trim(),rawSlug=(data.slug||'').trim().toLowerCase();
@@ -761,15 +823,15 @@ async function onSubmit(event){
  if(kind==='find-search'){
   if(busy)return;
   const d=findDraft();Object.assign(d,data);
-  const href=location.hash,query=d.query,source=d.source;
+  const href=location.pathname,query=d.query,source=d.source;
   const rows=await searchCompanies({workspace:r.ws.id,source:d.source,query:d.query});
-  if(!rows||href!==location.hash||ui.find!==d||d.step!==2||d.query!==query||d.source!==source)return;
+  if(!rows||href!==location.pathname||ui.find!==d||d.step!==2||d.query!==query||d.source!==source)return;
   d.rows=rows;d.step=3;render();return;
  }
  if(kind==='find-add'){
   const d=findDraft();const rows=d.rows.filter((x,i)=>isChecked(data,'row-'+i));
   if(!rows.length){notify('Select at least one lead to add.',true);return;}
-  const out=await action(kind,{rows,label:d.query},{message:false,after:()=>{location.hash=go('leads',r.p.id);}});
+   const out=await action(kind,{rows,label:d.query},{message:false,after:()=>{navigate(go('leads',r.p.id));}});
   if(out)notify(out.added+' added, '+out.duplicates+' duplicates, '+out.skipped+' skipped.');return;
  }
  if(kind==='import-preview'){
@@ -824,22 +886,24 @@ async function onSubmit(event){
  if(kind==='erase'&&data.confirm!=='ERASE'){notify('Type ERASE to confirm.',true);return;}
  await action(kind,data,{message:kind==='invite'?'Pending invitation saved.':undefined});
 }
-window.addEventListener('hashchange',()=>{
- const keepImport=route().page==='import';
- const prior=ui;ui=keepImport?{importOpen:prior.importOpen}:{};menu='';
- if(dialog.open)dialog.close();
- render({keepScroll:false});
-});
+window.addEventListener('popstate',onLocationChange);
 window.addEventListener('keydown',event=>{if(event.key==='Escape'&&menu){menu='';render();}});
-try{
- const authState=await request('/api/auth/status');
- authenticated=authState.authenticated;
- if(authenticated){
-  await refresh();
-  if(!location.hash)history.replaceState(null,'',workspace().projects[0]?go('today',workspace().projects[0].id):go('home'));
-  render({keepScroll:false});
- }else app.innerHTML=loginPage();
-}catch(error){app.textContent='Vitalise could not open. '+error.message;}
+// compat.js (classic script) may have already rendered an "unsupported browser"
+// notice; if so, skip booting so we don't overwrite it. If compat.js never loaded,
+// __compat is undefined and we boot normally.
+if(!window.__compat||window.__compat.ok!==false){
+ try{
+  const authState=await request('/api/auth/status');
+  authenticated=authState.authenticated;
+  if(authenticated){
+    await refresh();
+    if(location.pathname==='/')history.replaceState(null,'',workspace().projects[0]?go('today',workspace().projects[0].id):go('home'));
+    if(route().page==='thread')navCollapsed=true;
+    render({keepScroll:false});
+  }else app.innerHTML=loginPage();
+  window.__vitaliseBooted=true;
+ }catch(error){app.textContent='Vitalise could not open. '+error.message;}
+}
 window.addEventListener('error',event=>{notify(event.message||'Something went wrong.',true);});
 window.addEventListener('unhandledrejection',event=>{notify(event.reason?.message||'Something went wrong. Reload if it continues.',true);});
 

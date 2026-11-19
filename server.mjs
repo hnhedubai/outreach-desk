@@ -98,7 +98,7 @@ async function body(req,limit=3_000_000){
   return value;
  }catch{throw Object.assign(new Error('Expected a valid JSON object.'),{status:400});}
 }
-const paths=new Map([['/','index.html'],['/index.html','index.html'],['/robots.txt','robots.txt'],['/app.js','app.js'],['/css/style.css','css/style.css'],['/spreadsheet.js','spreadsheet.js'],['/ui.js','ui.js'],['/eligibility.js','eligibility.js'],['/project.js','project.js'],['/workspace.js','workspace.js'],['/sanitize.js','sanitize.js'],['/flow.js','flow.js'],['/favicon.ico','favicon.ico'],['/apple-icon.png','apple-icon.png'],['/icon-192.png','icon-192.png'],['/icon-384.png','icon-384.png'],['/fonts/Inter.ttf','fonts/Inter.ttf'],['/fonts/SpaceGrotesk.ttf','fonts/SpaceGrotesk.ttf']]);
+const paths=new Map([['/','index.html'],['/index.html','index.html'],['/robots.txt','robots.txt'],['/app.js','app.js'],['/compat.js','compat.js'],['/css/style.css','css/style.css'],['/spreadsheet.js','spreadsheet.js'],['/ui.js','ui.js'],['/eligibility.js','eligibility.js'],['/project.js','project.js'],['/workspace.js','workspace.js'],['/sanitize.js','sanitize.js'],['/flow.js','flow.js'],['/favicon.ico','favicon.ico'],['/apple-icon.png','apple-icon.png'],['/icon-192.png','icon-192.png'],['/icon-384.png','icon-384.png'],['/fonts/Inter.ttf','fonts/Inter.ttf'],['/fonts/SpaceGrotesk.ttf','fonts/SpaceGrotesk.ttf']]);
 const mime={html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',txt:'text/plain; charset=utf-8',ttf:'font/ttf',ico:'image/x-icon',png:'image/png'};
 const keyAvailable=()=>Boolean(process.env.EXA_API_KEY);
 const scoring=new Set();
@@ -268,11 +268,19 @@ const server=createServer(async(req,res)=>{
    send(res,200,{authenticated:Boolean(sessionFrom(req)),configured:Boolean(auth.configured)});
    return;
   }
-  const publicFile=paths.get(u.pathname);
-  if(req.method==='GET'&&publicFile){
-   send(res,200,await readFile(join(root,'public',publicFile)),mime[publicFile.split('.').at(-1)]);
-   return;
-  }
+   const publicFile=paths.get(u.pathname);
+   if(req.method==='GET'&&publicFile){
+    send(res,200,await readFile(join(root,'public',publicFile)),mime[publicFile.split('.').at(-1)]);
+    return;
+   }
+   // Client-side routes are real paths now (no '#'), so any other GET returns the app shell
+   // and the browser router resolves it on load. Extension-less segments are treated as
+   // routes (route ids never contain a dot); a dotted last segment is a missing file → 404.
+   // Only /api/* responses are gated by session.
+   if(req.method==='GET'&&!u.pathname.startsWith('/api/')){
+    const last=u.pathname.split('/').pop()||'';
+    if(!last.includes('.')){send(res,200,await readFile(join(root,'public','index.html')),mime.html);return;}
+   }
   if(u.pathname==='/api/auth/login'){
    requirePost(req);
    const input=await body(req,50_000);

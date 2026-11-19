@@ -24,10 +24,6 @@ function onboardingHome(ws){
  return header('Welcome to '+e(ws.name),'Either path creates a project with its own list, targeting and channels.',link('+ Create first project',go('new'),'btn primary'))+
   '<div class="onboard-grid">'+checklist+'<div class="onboard-main"><h2 class="onboard-q">Do you already have leads?</h2><p class="onboard-intro">Either way you end up with a project: what you offer, who it’s for, and a list we turn into who to contact today — per channel, per person.</p>'+chooser+'</div></div>';
 }
-export function threadTopnav(ui){
- const view=ui.threadView||'inbox';
- return '<span class="th-subnav-label">'+icon('thread')+' Thread</span>'+[['Inbox','inbox'],['Compose','compose'],['Campaigns','campaigns']].map(([label,key])=>'<button type="button" class="th-tab '+(view===key?'on':'')+'" data-action="thread-view" data-value="'+key+'">'+label+'</button>').join('');
-}
 const selfEmail=ws=>String(ws.members[0]?.email||'').toLowerCase();
 const thTime=stamp=>{const d=new Date(stamp),n=new Date();return d.toDateString()===n.toDateString()?d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});};
 const findLead=(ws,id)=>{for(const p of ws.projects){const l=p.leads.find(x=>x.id===id);if(l)return{l,p};}return null;};
@@ -55,8 +51,11 @@ function threadPage(ws,ui){
  const view=ui.threadView||'inbox';
  return '<div class="thread-wrap">'+(view==='compose'?threadCompose(ws,ui):view==='campaigns'?threadCampaigns(ws):threadInbox(ws,ui))+'</div>';
 }
-function threadInbox(ws,ui){
- const folder=ui.threadFolder||'inbox',se=selfEmail(ws);
+ // Read a persisted thread-pane width, clamped to [min,max]; falls back to def.
+ const thW=(key,def,min,max)=>{const n=parseInt(localStorage.getItem('vitalise.'+key),10);return Number.isFinite(n)?Math.min(max,Math.max(min,n)):def;};
+ function threadInbox(ws,ui){
+  const folder=ui.threadFolder||'inbox',se=selfEmail(ws);
+  const fw=thW('thFoldersW',250,160,440),lw=thW('thListW',360,220,680);
  const all=ws.threads||[];
  const query=String(ui.threadQuery||'').trim().toLowerCase();
  const inFolder=t=>folder==='all'?true:folder==='starred'?t.starred:folder==='important'?t.important:t.folder===folder;
@@ -71,11 +70,13 @@ function threadInbox(ws,ui){
    '<button type="button" class="th-star'+(t.starred?' on':'')+'" data-action="thread-star" data-thread="'+t.id+'" data-value="'+(t.starred?'false':'true')+'" aria-label="Star">'+(t.starred?'★':'☆')+'</button>'+
    '<div class="th-col"><div class="th-row1"><span class="th-from">'+e(other.name||other.email||'—')+'</span><span class="th-subj">'+e(t.subject)+'</span><span class="th-time">'+e(thTime(t.updatedAt))+'</span></div>'+
    '<div class="th-snip">'+e(threadSnippet(t))+'</div><div class="th-eng">'+tags+'</div></div></div>';};
- return '<div class="th-panes"><div class="th-folders"><div class="th-compose-row">'+btn('✎ Compose','thread-compose','primary')+'</div>'+
-  folders.map(([k,label])=>'<a class="th-folder '+(folder===k?'active':'')+'" href="#" data-action="thread-folder" data-value="'+k+'">'+label+(count(k)?'<span class="n">'+count(k)+'</span>':'')+'</a>').join('')+'</div>'+
-  '<div class="th-list"><div class="th-list-head"><input class="th-search" type="search" placeholder="Search conversations" aria-label="Search conversations" value="'+e(ui.threadQuery||'')+'" data-input="threadQuery"><span class="count muted">'+rows.length+'</span></div>'+
-  (rows.length?rows.map(row).join(''):'<div class="th-empty">'+(query?'No conversations match your search.':'No messages in this folder.')+'</div>')+'</div>'+
-  '<div class="th-reader">'+(sel?threadReader(ws,ui,sel,se):'<div class="th-empty">Nothing to read in this folder.</div>')+'</div></div>';
+  return '<div class="th-panes"><div class="th-folders" style="flex-basis:'+fw+'px"><div class="th-compose-row">'+btn('✎ Compose','thread-compose','primary')+'</div>'+
+   folders.map(([k,label])=>'<a class="th-folder '+(folder===k?'active':'')+'" href="#" data-action="thread-folder" data-value="'+k+'">'+label+(count(k)?'<span class="n">'+count(k)+'</span>':'')+'</a>').join('')+'</div>'+
+   '<div class="th-resizer" data-resize="folders" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize folders pane"></div>'+
+   '<div class="th-list" style="flex-basis:'+lw+'px"><div class="th-list-head"><input class="th-search" type="search" placeholder="Search conversations" aria-label="Search conversations" value="'+e(ui.threadQuery||'')+'" data-input="threadQuery"><span class="count muted">'+rows.length+'</span></div>'+
+   (rows.length?rows.map(row).join(''):'<div class="th-empty">'+(query?'No conversations match your search.':'No messages in this folder.')+'</div>')+'</div>'+
+   '<div class="th-resizer" data-resize="list" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize message list"></div>'+
+   '<div class="th-reader">'+(sel?threadReader(ws,ui,sel,se):'<div class="th-empty">Nothing to read in this folder.</div>')+'</div></div>';
 }
 function threadReader(ws,ui,t,se){
  const lead=t.leadId?findLead(ws,t.leadId):null;
