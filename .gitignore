@@ -3,4 +3,7 @@ data/
 .env.bak*
 node_modules/
 *.log
+# Relay secrets and vendored PHPMailer are deployed via FTP, never committed.
+relay/config.php
+relay/PHPMailer/
 

@@ -10,7 +10,9 @@ import {firecrawlAvailable,firecrawlSearch} from './firecrawl.mjs';
 import {perplexityAvailable,perplexitySearch,limaAvailable,findLimaEmail,reoonAvailable,verifyReoonEmail,reoonBalance} from './research-providers.mjs';
 import {verifyDomains} from './domain.mjs';
 import {mailSettingsPublic,saveMailSettings,loadMailSettings,assertSafeImapHost} from './mail-settings.mjs';
-import {fetchRecentMail,imapConfigured} from './imap.mjs';
+ import {fetchRecentMail,imapConfigured} from './imap.mjs';
+import {createMailServer} from './mail-server.mjs';
+import {sendConfigured,sendViaRelay} from './mail-send.mjs';
 import {authUsername,clearSessions,createSession,destroySession,ensureAuth,ensureAdminPassword,initSessions,readAuth,sessionFrom,setPassword,verifyPassword} from './auth.mjs';
 export function classifyStreamError(error,req){
  if(error&&error.status)return {status:error.status,message:error.message};
@@ -31,6 +33,11 @@ const allowedHosts=()=>new Set(String(process.env.OUTREACH_ALLOWED_HOSTS??'').sp
 // A proxy terminates TLS, so the visible request scheme is http:// but the browser's
 // Origin header carries https://. Trust the forwarded proto, never the raw socket.
 const requestScheme=req=>serverMode()?(String(req.headers['x-forwarded-proto']??'').split(',')[0].trim()||'https'):'http';
+// Build the session Set-Cookie value. The Secure flag is added only when the request
+// actually arrived over https (server mode behind a TLS-terminating proxy), so the cookie
+// can never be sent in cleartext there. A local http://localhost install must NOT set
+// Secure, or the browser drops the cookie and login breaks entirely.
+const sessionCookie=(req,token,maxAge)=>`outreach_session=${token}; HttpOnly; SameSite=Strict;${requestScheme(req)==='https'?' Secure;':''} Path=/; Max-Age=${maxAge}`;
 export async function createApp({db:providedDb,dataDir:providedDataDir,port:requestedPort}={}){
  const root=dirname(fileURLToPath(import.meta.url));
  const port=Number(requestedPort??process.env.PORT??8282);
@@ -98,7 +105,7 @@ async function body(req,limit=3_000_000){
   return value;
  }catch{throw Object.assign(new Error('Expected a valid JSON object.'),{status:400});}
 }
-const paths=new Map([['/','index.html'],['/index.html','index.html'],['/robots.txt','robots.txt'],['/app.js','app.js'],['/css/style.css','css/style.css'],['/spreadsheet.js','spreadsheet.js'],['/ui.js','ui.js'],['/eligibility.js','eligibility.js'],['/project.js','project.js'],['/workspace.js','workspace.js'],['/sanitize.js','sanitize.js'],['/flow.js','flow.js'],['/favicon.ico','favicon.ico'],['/apple-icon.png','apple-icon.png'],['/icon-192.png','icon-192.png'],['/icon-384.png','icon-384.png'],['/fonts/Inter.ttf','fonts/Inter.ttf'],['/fonts/SpaceGrotesk.ttf','fonts/SpaceGrotesk.ttf']]);
+const paths=new Map([['/','index.html'],['/index.html','index.html'],['/robots.txt','robots.txt'],['/app.js','app.js'],['/compat.js','compat.js'],['/css/style.css','css/style.css'],['/spreadsheet.js','spreadsheet.js'],['/ui.js','ui.js'],['/eligibility.js','eligibility.js'],['/project.js','project.js'],['/workspace.js','workspace.js'],['/sanitize.js','sanitize.js'],['/flow.js','flow.js'],['/favicon.ico','favicon.ico'],['/apple-icon.png','apple-icon.png'],['/icon-192.png','icon-192.png'],['/icon-384.png','icon-384.png'],['/fonts/Inter.ttf','fonts/Inter.ttf'],['/fonts/SpaceGrotesk.ttf','fonts/SpaceGrotesk.ttf']]);
 const mime={html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',txt:'text/plain; charset=utf-8',ttf:'font/ttf',ico:'image/x-icon',png:'image/png'};
 const keyAvailable=()=>Boolean(process.env.EXA_API_KEY);
 const scoring=new Set();
@@ -107,8 +114,8 @@ function stateResponse(state,result){
  for(const workspace of state.workspaces)for(const project of workspace.projects)for(const lead of project.leads){
   if(lead.jevFit)lead.jevFit.stale=!currentJevFit(project,lead);
  }
-  return {state,result,webSearch:keyAvailable(),jevAvailable:jevAvailable(),firecrawlAvailable:firecrawlAvailable(),
-   perplexityAvailable:perplexityAvailable(),limaAvailable:limaAvailable(),reoonAvailable:reoonAvailable()};
+   return {state,result,webSearch:keyAvailable(),jevAvailable:jevAvailable(),firecrawlAvailable:firecrawlAvailable(),
+    perplexityAvailable:perplexityAvailable(),limaAvailable:limaAvailable(),reoonAvailable:reoonAvailable(),mailSend:sendConfigured()};
 }
 function scoringTarget(state,input){
  const workspace=state.workspaces.find(workspace=>workspace.id===input?.workspace);
@@ -255,9 +262,13 @@ function exportAudit(ws,project,from,to,format){
  const rows=ws.audit.filter(e=>(!project||e.project===project)&&(!from||e.at.slice(0,10)>=from)&&(!to||e.at.slice(0,10)<=to)).map(e=>({
   time:e.at,project:e.project,action:e.type,channel:e.channel||'',lead:e.leadId?hash(e.leadId):'',contact:e.email?hash(e.email):''
  }));
- return format==='jsonl'?rows.map(x=>JSON.stringify(x)).join('\n'):['time,project,action,channel,lead,contact',...rows.map(r=>Object.values(r).map(csv).join(','))].join('\n');
-}
-const server=createServer(async(req,res)=>{
+  return format==='jsonl'?rows.map(x=>JSON.stringify(x)).join('\n'):['time,project,action,channel,lead,contact',...rows.map(r=>Object.values(r).map(csv).join(','))].join('\n');
+ }
+  // Real-time mail (IDLE watcher, live SSE stream, shared ingest/CAS write) lives in
+  // mail-server.mjs, wired with this app's store/read/encodeState/perform so the request
+  // handler below only routes to it rather than owning a stateful background resource.
+  const mail=createMailServer({dataDir, store, read, encodeState, requestError, perform});
+ const server=createServer(async(req,res)=>{
  try{
    const boundPort=server.address()?.port;
    const hostHeader=String(req.headers.host??'').toLowerCase();
@@ -268,19 +279,27 @@ const server=createServer(async(req,res)=>{
    send(res,200,{authenticated:Boolean(sessionFrom(req)),configured:Boolean(auth.configured)});
    return;
   }
-  const publicFile=paths.get(u.pathname);
-  if(req.method==='GET'&&publicFile){
-   send(res,200,await readFile(join(root,'public',publicFile)),mime[publicFile.split('.').at(-1)]);
-   return;
-  }
+   const publicFile=paths.get(u.pathname);
+   if(req.method==='GET'&&publicFile){
+    send(res,200,await readFile(join(root,'public',publicFile)),mime[publicFile.split('.').at(-1)]);
+    return;
+   }
+   // Client-side routes are real paths now (no '#'), so any other GET returns the app shell
+   // and the browser router resolves it on load. Extension-less segments are treated as
+   // routes (route ids never contain a dot); a dotted last segment is a missing file → 404.
+   // Only /api/* responses are gated by session.
+   if(req.method==='GET'&&!u.pathname.startsWith('/api/')){
+    const last=u.pathname.split('/').pop()||'';
+    if(!last.includes('.')){send(res,200,await readFile(join(root,'public','index.html')),mime.html);return;}
+   }
   if(u.pathname==='/api/auth/login'){
    requirePost(req);
    const input=await body(req,50_000);
    if(input.username!==authUsername||!(await verifyPassword(dataDir,input.password)))throw requestError(401,'Incorrect username or password.');
-   const token=createSession();
-   res.setHeader('Set-Cookie','outreach_session='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000');
-   send(res,200,{ok:true});
-   return;
+    const token=createSession();
+    res.setHeader('Set-Cookie',sessionCookie(req,token,31536000));
+    send(res,200,{ok:true});
+    return;
   }
   if(u.pathname==='/api/auth/reset-status'&&req.method==='GET'){
    send(res,200,{configured:Boolean(await readAuth(dataDir))});
@@ -289,17 +308,17 @@ const server=createServer(async(req,res)=>{
   const session=sessionFrom(req);
   if(!session){send(res,401,{error:'Please log in.'});return;}
   if(u.pathname==='/api/auth/logout'){
-   requirePost(req);destroySession(req);
-   res.setHeader('Set-Cookie','outreach_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
+    requirePost(req);destroySession(req);
+    res.setHeader('Set-Cookie',sessionCookie(req,'',0));
    send(res,200,{ok:true});return;
   }
   if(u.pathname==='/api/auth/change-password'){
    requirePost(req);
    const input=await body(req,50_000);
    if(!(await verifyPassword(dataDir,input.currentPassword)))throw requestError(401,'Current password is incorrect.');
-   await setPassword(dataDir,input.newPassword);clearSessions();
-   const token=createSession();
-   res.setHeader('Set-Cookie','outreach_session='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000');
+    await setPassword(dataDir,input.newPassword);clearSessions();
+    const token=createSession();
+    res.setHeader('Set-Cookie',sessionCookie(req,token,31536000));
    send(res,200,{ok:true});return;
   }
   if(u.pathname==='/api/state'&&req.method==='GET'){send(res,200,stateResponse(await load()));return;}
@@ -309,8 +328,15 @@ const server=createServer(async(req,res)=>{
   if(u.pathname==='/api/mail/save'){
     requirePost(req);
     const input=await body(req,50_000);
-    await saveMailSettings(dataDir,input);
-    send(res,200,{ok:true,settings:await mailSettingsPublic(dataDir)});return;
+    // Bind the mailbox to a concrete workspace so the IDLE watcher ingests there instead
+    // of the browser-driven active workspace. Default to the first workspace and reject an
+    // unknown id, so live intake can never be stranded on a stale or hand-typed value.
+    const state=await read();
+    const workspace=String(input.workspace||state.workspaces[0]?.id||'');
+    if(!state.workspaces.some(w=>w.id===workspace))throw requestError(400,'Unknown workspace for the mailbox.');
+     await saveMailSettings(dataDir,{...input,workspace});
+      await mail.stopWatcher();await mail.startWatcher(); // apply the new mailbox without a process restart
+     send(res,200,{ok:true,settings:await mailSettingsPublic(dataDir)});return;
   }
   if(u.pathname==='/api/mail/test'){
     requirePost(req);await body(req,10_000);
@@ -335,8 +361,8 @@ const server=createServer(async(req,res)=>{
     if(!settings||!imapConfigured(settings))throw requestError(400,'Save a mailbox address and password first.');
     await assertSafeImapHost(settings.host); // re-validate before dialing (mail.json could be hand-edited)
     // Check the client's revision BEFORE the (slow) IMAP fetch so a stale request is
-    // rejected without spending a network round-trip; the same loaded state is reused
-    // for the ingest, and the CAS on save still guards against a concurrent write.
+    // rejected without spending a network round-trip. ingestMail re-loads and CAS-saves,
+    // so a concurrent write (including the IDLE watcher) is still handled safely.
     const state=await load();
     if(input.revision!==undefined&&input.revision!==state.revision)throw requestError(409,'The workspace changed. Refresh and try again.');
     let messages;
@@ -345,10 +371,52 @@ const server=createServer(async(req,res)=>{
       console.error('IMAP fetch failed:',error.response||error.message||error);
       throw requestError(502,'Could not fetch mail. Check the mailbox settings and try again.');
     }
-    const result=perform(state,'thread-ingest',{workspace:input.workspace,messages});
+    const result=await mail.ingestMail(messages,{workspace:input.workspace});
+    send(res,200,stateResponse(await read(),result));return;
+  }
+  if(u.pathname==='/api/mail/send'){
+    // Transmit an ALREADY-RECORDED outgoing message (the client records via /api/action, then
+    // calls this only when the server advertised mailSend). Safe by default: refuses with 503
+    // unless MAIL_RELAY_URL + MAIL_RELAY_SECRET are set, so an unconfigured install never sends.
+    requirePost(req);
+    const input=await body(req,200_000);
+    if(!sendConfigured())throw requestError(503,'Set MAIL_RELAY_URL and MAIL_RELAY_SECRET to enable sending.');
+    const settings=await loadMailSettings(dataDir);
+    if(!settings||!settings.user)throw requestError(400,'Save a mailbox address first — it is used as the sender.');
+    const state=await read();
+    const ws=state.workspaces.find(w=>w.id===(input.workspace||state.active));
+    if(!ws)throw requestError(404,'Workspace unavailable.');
+    const thread=ws.threads.find(t=>t.id===input.threadId);
+    if(!thread)throw requestError(404,'Conversation unavailable.');
+    const message=input.messageId?thread.messages.find(m=>m.id===input.messageId):thread.messages.at(-1);
+    if(!message)throw requestError(404,'Message unavailable.');
+    // smtpUser/smtpPass reuse the saved mailbox login so the relay never has to store the password.
+    const email={from:settings.user,fromName:ws.members[0]?.name||'',
+      to:message.to.map(p=>p.email).filter(Boolean),cc:message.cc.map(p=>p.email).filter(Boolean),
+      subject:thread.subject||'(no subject)',html:message.bodyHtml||'',text:message.bodyText||'',
+      smtpUser:settings.user,smtpPass:settings.password||''};
+    let status='sent',err='';
+    try{await sendViaRelay(email);}catch(error){status='failed';err=error.message;}
+    perform(state,'thread-send-status',{workspace:ws.id,threadId:thread.id,messageId:message.id,status,error:err});
     const previous=state.revision;state.revision++;
     if(!(await store.save(state.revision,encodeState(state),previous)))throw requestError(409,'The workspace changed. Refresh and try again.');
-    send(res,200,stateResponse(state,result));return;
+    if(status==='failed')throw requestError(502,'Saved to Sent, but delivery failed: '+(err||'the mail relay rejected the message.'));
+    send(res,200,stateResponse(state,{sent:true}));return;
+  }
+  if(u.pathname==='/api/mail/stream'&&req.method==='GET'){
+    // Live inbox updates for the Thread view. send() always ends the response, so this
+    // route writes the SSE headers/body directly and keeps the socket open. It sits after
+    // the session gate (sessionFrom → 401), so it is never exposed unauthenticated.
+    res.writeHead(200,{'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-cache, no-transform',Connection:'keep-alive','X-Accel-Buffering':'no'});
+    res.write('retry: 3000\n\n');
+    res.write('data: '+JSON.stringify({hello:true})+'\n\n');
+    mail.addSseClient(res);
+    // On a failed keep-alive write the socket is already gone; deregister it immediately so
+    // a dead client cannot linger in the set (and keep erroring) before its 'close' fires.
+    const ping=setInterval(()=>{try{res.write(': ping\n\n');}catch{clearInterval(ping);mail.removeSseClient(res);}},25_000);
+    ping.unref?.();
+    req.on('close',()=>{clearInterval(ping);mail.removeSseClient(res);});
+    return;
   }
   if(u.pathname==='/api/import-preview'){
     requirePost(req);
@@ -424,11 +492,12 @@ return {
    server.listen(port,serverMode()?'0.0.0.0':'127.0.0.1',()=>{
     const where=serverMode()?'listening on 0.0.0.0:'+server.address().port+' (server mode)':'http://localhost:'+server.address().port+'/';
     const storeLabel=store.backend==='postgres'?'Neon Postgres (DATABASE_URL)':'local SQLite '+join(dataDir,'outreach.sqlite');
-    console.log('Vitalise · '+where+' · store: '+storeLabel);
-   });
+     console.log('Vitalise · '+where+' · store: '+storeLabel);
+      mail.startWatcher(); // transient boot failures retry internally (see mail-server.mjs)
+    });
  }),
  close:()=>new Promise(resolveClose=>{
-  const finish=()=>{clearInterval(dailyInterval);Promise.resolve(store.close()).then(()=>resolveClose(),()=>resolveClose());};
+    const finish=async()=>{clearInterval(dailyInterval);await mail.stopWatcher();Promise.resolve(store.close()).then(()=>resolveClose(),()=>resolveClose());};
   if(server.listening)server.close(finish);else finish();
  })
 };

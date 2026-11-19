@@ -15,13 +15,14 @@
 // (server.mjs does, transitively, on every request) never requires the packages to
 // be installed. CI runs `node --test` with no `npm install` — the same pattern used
 // for pg in db.mjs — so the deps only resolve when a real IMAP call is made.
+// Single source of truth for the DreamHost defaults lives in mail-settings.mjs; importing
+// them here (builtins-only, no npm deps) keeps CI dep-free and prevents host/port drift.
+import {HOST_DEFAULT,PORT_DEFAULT,MAILBOX_DEFAULT} from './mail-settings.mjs';
 let _ImapFlow=null,_simpleParser=null;
 async function imapflowLib(){if(!_ImapFlow)({ImapFlow:_ImapFlow}=await import('imapflow'));return _ImapFlow;}
 async function mailparserLib(){if(!_simpleParser)({simpleParser:_simpleParser}=await import('mailparser'));return _simpleParser;}
 
-const HOST_DEFAULT='imap.dreamhost.com';
-const PORT_DEFAULT=993;
-const MAILBOX_DEFAULT='INBOX';
+// (HOST_DEFAULT / PORT_DEFAULT / MAILBOX_DEFAULT are imported from mail-settings.mjs above.)
 
 // Resolve a settings object, defaulting each field from the environment so the
 // standalone script needs no changes. `settings` may be partial or omitted.
@@ -116,6 +117,18 @@ export function watchMail({onNew, onError, ...settings} = {}) {
   let stopped = false;
   let client = null;
   let timer = null;
+  // UID high-water mark. IMAP sequence numbers shift whenever a message is expunged,
+  // so fetching the message whose sequence number equals the mailbox count is wrong
+  // after any expunge and can miss messages that land while a fetch is in flight.
+  // UIDs are stable and monotonically increasing per mailbox, so we remember the
+  // highest UID already ingested and only ever fetch the UIDs above it. This survives
+  // reconnects (the mark is closure state, not per-connection) and, if the server does
+  // not report UIDNEXT, the mark stays 0 and the first new-mail event backfills the
+  // mailbox — safe, because the reducer dedups by Message-ID.
+  let lastUid = 0;
+  // Serialize `exists` handling: one batch is fetched, ingested and committed at a time,
+  // so overlapping IDLE notifications can never race the UID high-water mark.
+  let busy = false;
 
   const start = async () => {
     if (stopped) return;
@@ -123,13 +136,37 @@ export function watchMail({onNew, onError, ...settings} = {}) {
     try {
       await client.connect();
       await client.mailboxOpen(s.mailbox);
-      client.on('exists', async (info) => {
-        const seq = info.exists; // highest recent number
+      // Seed the mark so opening the watcher never re-ingests mail that already landed.
+      const uidNext = Number(client.mailbox && client.mailbox.uidNext);
+      if (!lastUid && Number.isFinite(uidNext) && uidNext > 0) lastUid = uidNext - 1;
+      client.on('exists', async () => {
+        if (stopped || busy) return;
+        busy = true;
+        const mark = lastUid;
+        // `exists` fires when the message count grows, i.e. new mail. Fetch every UID
+        // above the mark (not just the newest) so a burst of arrivals is fully ingested.
         try {
-          for await (const msg of client.fetch(String(seq), FETCH)) {
-            if (msg && msg.source) onNew && onNew(await normalize(msg));
+          // Collect and normalise the whole range first. A single unparseable message is
+          // skipped (its UID is still covered by maxSeen) instead of aborting the burst.
+          const batch = [];
+          let maxSeen = mark;
+          for await (const msg of client.fetch(`${mark + 1}:*`, FETCH, {uid: true})) {
+            if (!msg) continue;
+            if (msg.uid > maxSeen) maxSeen = msg.uid;
+            if (!msg.source) continue;
+            try { batch.push(await normalize(msg)); }
+            catch (err) { onError && onError(err); }
           }
-        } catch (err) { onError && onError(err); }
+          // Await the batch ingest. If it throws (e.g. a CAS conflict after all retries),
+          // we fall through WITHOUT moving lastUid, so the next `exists` re-fetches and
+          // retries — inbound mail is never silently lost.
+          if (batch.length && onNew) await onNew(batch);
+          lastUid = maxSeen;
+        } catch (err) {
+          onError && onError(err);
+        } finally {
+          busy = false;
+        }
       });
       // client.idle() resolves when the IDLE session ends (server timeout / stop).
       await client.idle();

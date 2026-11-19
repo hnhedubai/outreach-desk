@@ -40,6 +40,19 @@ test('a saved password is encrypted at rest and never appears in the file or the
   });
 });
 
+test('the mailbox records the workspace it is bound to, for deterministic live intake',async()=>{
+  const dir=await tmp();
+  await withEnv({OUTREACH_SECRET:SECRET},async()=>{
+    try{
+      await saveMailSettings(dir,{host:'8.8.8.8',user:'me@example.com',password:'p',workspace:'grynh2'});
+      assert.equal((await loadMailSettings(dir)).workspace,'grynh2','loadMailSettings surfaces the bound workspace');
+      assert.equal((await mailSettingsPublic(dir)).workspace,'grynh2','the public view carries the bound workspace');
+      await saveMailSettings(dir,{host:'8.8.8.8',user:'me@example.com',password:'p'});
+      assert.equal((await loadMailSettings(dir)).workspace,'','omitting workspace clears the binding');
+    }finally{await rm(dir,{recursive:true,force:true});}
+  });
+});
+
 test('re-saving with a blank password keeps the stored one; a new password re-seals',async()=>{
   const dir=await tmp();
   await withEnv({OUTREACH_SECRET:SECRET},async()=>{
@@ -98,6 +111,17 @@ test('thread-ingest creates inbox threads and dedupes by Message-ID',()=>{
   const r2=perform(s,'thread-ingest',{workspace:WS,messages:[msg()]});
   assert.equal(r2.added,0,'the same Message-ID is not imported twice');
   assert.equal(ws.threads.length,before+1,'exactly one new thread was created in total');
+});
+
+test('thread-ingest ingests distinct messages that carry neither Message-ID nor uid',()=>{
+  const s=structuredClone(createState());
+  const ws=s.workspaces.find(w=>w.id===WS);
+  const r=perform(s,'thread-ingest',{workspace:WS,messages:[
+    {from:'A <a@lead.com>',to:'me@ws.com',subject:'one',text:'x',html:''},
+    {from:'B <b@lead.com>',to:'me@ws.com',subject:'two',text:'y',html:''},
+  ]});
+  assert.equal(r.added,2,'two identifier-less messages from different senders are both ingested, not collapsed onto one empty dedup key');
+  assert.equal(r.updated,undefined,'the ingest result no longer carries a dead updated field');
 });
 
 test('thread-ingest skips messages without a sender address and sanitises HTML bodies',()=>{

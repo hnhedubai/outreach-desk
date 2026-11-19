@@ -22,7 +22,7 @@ export const icon=(name)=>{
 export const linkedinIcon=()=>'<svg class="li-icon" viewBox="0 0 16 16" role="img" aria-label="LinkedIn profile"><rect width="16" height="16" rx="2.6" fill="#0A66C2"/><circle cx="4.2" cy="4.3" r="1.15" fill="#fff"/><rect x="3.3" y="6.4" width="1.8" height="6.1" fill="#fff"/><path d="M6.6 6.4h1.8v.85c.35-.65 1.05-1.05 2-1.05 1.6 0 2.5.95 2.5 2.7v3.6h-1.85V9.2c0-.9-.42-1.35-1.15-1.35-.78 0-1.65.5-1.65 1.65v3.3H6.6z" fill="#fff"/></svg>';
 export const attr=(obj={})=>Object.entries(obj).filter(([,v])=>v!==undefined&&v!==false).map(([k,v])=>v===true?' '+k:' '+k+'="'+e(v)+'"').join('');
 export const btn=(label,action,classes='',data={})=>' <button type="button" class="btn '+e(classes)+'"'+attr({'data-action':action,...data})+'>'+e(label)+'</button>';
-export const go=(page,p='',l='',tab='')=>'#/'+[p?'p':'',p,page,l,tab].filter(Boolean).map(encodeURIComponent).join('/');
+export const go=(page,p='',l='',tab='')=>'/'+[p?'p':'',p,page,l,tab].filter(Boolean).map(encodeURIComponent).join('/');
 export const link=(label,href,classes='btn')=>'<a class="'+e(classes)+'" href="'+e(href)+'">'+e(label)+'</a>';
 export const rowLink=(lead,p)=>go('lead',p.id,lead.id,'channels');
 export const ext=(value,label=value)=>{

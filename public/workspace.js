@@ -24,10 +24,6 @@ function onboardingHome(ws){
  return header('Welcome to '+e(ws.name),'Either path creates a project with its own list, targeting and channels.',link('+ Create first project',go('new'),'btn primary'))+
   '<div class="onboard-grid">'+checklist+'<div class="onboard-main"><h2 class="onboard-q">Do you already have leads?</h2><p class="onboard-intro">Either way you end up with a project: what you offer, who it’s for, and a list we turn into who to contact today — per channel, per person.</p>'+chooser+'</div></div>';
 }
-export function threadTopnav(ui){
- const view=ui.threadView||'inbox';
- return '<span class="th-subnav-label">'+icon('thread')+' Thread</span>'+[['Inbox','inbox'],['Compose','compose'],['Campaigns','campaigns']].map(([label,key])=>'<button type="button" class="th-tab '+(view===key?'on':'')+'" data-action="thread-view" data-value="'+key+'">'+label+'</button>').join('');
-}
 const selfEmail=ws=>String(ws.members[0]?.email||'').toLowerCase();
 const thTime=stamp=>{const d=new Date(stamp),n=new Date();return d.toDateString()===n.toDateString()?d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});};
 const findLead=(ws,id)=>{for(const p of ws.projects){const l=p.leads.find(x=>x.id===id);if(l)return{l,p};}return null;};
@@ -53,10 +49,13 @@ export const quoteTrail=message=>{
   const sigFmt=(cmd,label,title)=>'<button type="button" class="btn subtle th-fmt" data-action="sig-fmt" data-cmd="'+cmd+'" title="'+e(title)+'" aria-label="'+e(title)+'">'+label+'</button>';
 function threadPage(ws,ui){
  const view=ui.threadView||'inbox';
- return '<div class="thread-wrap">'+(view==='compose'?threadCompose(ws,ui):view==='campaigns'?threadCampaigns(ws):threadInbox(ws,ui))+'</div>';
+ return '<div class="thread-wrap">'+(view==='compose'?threadCompose(ws,ui):threadInbox(ws,ui))+'</div>';
 }
-function threadInbox(ws,ui){
- const folder=ui.threadFolder||'inbox',se=selfEmail(ws);
+ // Read a persisted thread-pane width, clamped to [min,max]; falls back to def.
+ const thW=(key,def,min,max)=>{const n=parseInt(localStorage.getItem('vitalise.'+key),10);return Number.isFinite(n)?Math.min(max,Math.max(min,n)):def;};
+ function threadInbox(ws,ui){
+  const folder=ui.threadFolder||'inbox',se=selfEmail(ws);
+  const fw=thW('thFoldersW',250,160,440),lw=thW('thListW',360,220,680);
  const all=ws.threads||[];
  const query=String(ui.threadQuery||'').trim().toLowerCase();
  const inFolder=t=>folder==='all'?true:folder==='starred'?t.starred:folder==='important'?t.important:t.folder===folder;
@@ -71,11 +70,13 @@ function threadInbox(ws,ui){
    '<button type="button" class="th-star'+(t.starred?' on':'')+'" data-action="thread-star" data-thread="'+t.id+'" data-value="'+(t.starred?'false':'true')+'" aria-label="Star">'+(t.starred?'★':'☆')+'</button>'+
    '<div class="th-col"><div class="th-row1"><span class="th-from">'+e(other.name||other.email||'—')+'</span><span class="th-subj">'+e(t.subject)+'</span><span class="th-time">'+e(thTime(t.updatedAt))+'</span></div>'+
    '<div class="th-snip">'+e(threadSnippet(t))+'</div><div class="th-eng">'+tags+'</div></div></div>';};
- return '<div class="th-panes"><div class="th-folders"><div class="th-compose-row">'+btn('✎ Compose','thread-compose','primary')+'</div>'+
-  folders.map(([k,label])=>'<a class="th-folder '+(folder===k?'active':'')+'" href="#" data-action="thread-folder" data-value="'+k+'">'+label+(count(k)?'<span class="n">'+count(k)+'</span>':'')+'</a>').join('')+'</div>'+
-  '<div class="th-list"><div class="th-list-head"><input class="th-search" type="search" placeholder="Search conversations" aria-label="Search conversations" value="'+e(ui.threadQuery||'')+'" data-input="threadQuery"><span class="count muted">'+rows.length+'</span></div>'+
-  (rows.length?rows.map(row).join(''):'<div class="th-empty">'+(query?'No conversations match your search.':'No messages in this folder.')+'</div>')+'</div>'+
-  '<div class="th-reader">'+(sel?threadReader(ws,ui,sel,se):'<div class="th-empty">Nothing to read in this folder.</div>')+'</div></div>';
+  return '<div class="th-panes"><div class="th-folders" style="flex-basis:'+fw+'px"><div class="th-compose-row">'+btn('✎ Compose','thread-compose','primary')+'</div>'+
+   folders.map(([k,label])=>'<a class="th-folder '+(folder===k?'active':'')+'" href="#" data-action="thread-folder" data-value="'+k+'">'+label+(count(k)?'<span class="n">'+count(k)+'</span>':'')+'</a>').join('')+'</div>'+
+   '<div class="th-resizer" data-resize="folders" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize folders pane"></div>'+
+   '<div class="th-list" style="flex-basis:'+lw+'px"><div class="th-list-head"><input class="th-search" type="search" placeholder="Search conversations" aria-label="Search conversations" value="'+e(ui.threadQuery||'')+'" data-input="threadQuery"><span class="count muted">'+rows.length+'</span></div>'+
+   (rows.length?rows.map(row).join(''):'<div class="th-empty">'+(query?'No conversations match your search.':'No messages in this folder.')+'</div>')+'</div>'+
+   '<div class="th-resizer" data-resize="list" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize message list"></div>'+
+   '<div class="th-reader">'+(sel?threadReader(ws,ui,sel,se):'<div class="th-empty">Nothing to read in this folder.</div>')+'</div></div>';
 }
 function threadReader(ws,ui,t,se){
  const lead=t.leadId?findLead(ws,t.leadId):null;
@@ -143,31 +144,6 @@ function threadCompose(ws,ui){
   '<div class="th-compose-foot">'+btn('Save draft','thread-save-draft','subtle')+
    '<span class="th-send">'+btn(mode==='receive'?'Log reply':'Send','thread-submit','primary')+'</span></div>'+
   '</div></div>';
-}
-function threadCampaigns(ws){
- const camps=[
-  {name:'Q4 e-SAF outreach',channel:'bulk sender',sent:312,total:1240,held:8,bounced:2,state:'review'},
-  {name:'Wind investors — Nordic',channel:'bulk sender',sent:448,total:700,held:0,bounced:5,state:'running'},
-  {name:'Iron & Steel offtake',channel:'draft',sent:0,total:0,held:0,bounced:0,state:'draft'}
- ];
- const steps=[['1 Audience','done'],['2 From','done'],['3 Content','on'],['4 Review',''],['5 Pacing','']];
- const board=[['Sent','312','muted'],['Delivered','288','ok'],['Opened','141','open'],['Clicked','37','click'],['Replied','9','reply'],['Held','8','warn']];
- return '<div class="th-camp"><div class="th-camp-head"><h2>Campaigns</h2><p class="muted">Bulk sends go through the workspace’s bulk sender subdomain. Review mode → Approve → booked. <span class="th-demo-tag">sample data</span></p></div>'+
- '<div class="th-camp-grid"><div>'+btn('+ New campaign','thread-demo','primary row-gap')+'</div></div>'+
- '<div class="th-camp-grid"><div class="stack">'+camps.map(c=>'<div class="th-crow"><div class="th-crow-meta"><b>'+e(c.name)+'</b><span class="muted small"> · '+e(c.channel)+'</span>'+
- (c.total?'<div class="bar">'+bar(c.sent/c.total*100)+'</div><div class="small muted">'+c.sent+' / '+c.total+' sent · <span class="warn">'+c.held+' held</span> · <span class="bad">'+c.bounced+' bounced</span></div>':'<div class="small muted">not booked</div>')+
- '</div>'+btn(c.state==='review'?'Review':c.state==='running'?'Open':'Continue','thread-demo','subtle')+'</div>').join('')+
- '</div><div class="th-wiz"><b>Builder — Q4 e-SAF outreach</b><span class="th-demo-tag">sample data</span>'+
- '<div class="th-wsteps">'+steps.map(([label,cls])=>'<span class="th-wstep '+cls+'">'+label+'</span>').join('')+'</div>'+
- '<div class="th-kv"><span class="muted">Audience segment</span><b>safe-to-contact · 1,240</b></div>'+
- '<div class="th-kv"><span class="muted">Gate breakdown</span><span><b class="ok">✓ 1,180</b> · <b class="bad">✕ 60 suppressed</b></span></div>'+
- '<div class="th-kv"><span class="muted">Sender / reputation</span><b>warmup 25%</b></div>'+
- '<div class="bar">'+bar(25)+'</div>'+
- '<div class="th-kv"><span class="muted">Daily cap</span><b>2,000 · gap auto</b></div>'+
- '<div class="small muted th-board-label">Live board</div>'+
- '<div class="th-board">'+board.map(([label,value,cls])=>'<div class="th-stat"><div class="big '+cls+'">'+value+'</div><div class="lbl">'+label+'</div></div>').join('')+'</div>'+
- '<div class="th-wiz-actions">'+btn('Save draft','thread-demo')+btn('Preview sample →','thread-demo','primary')+'</div>'+
- '</div></div></div>';
 }
 function mailboxCard(mail){
  const m=mail||{};
