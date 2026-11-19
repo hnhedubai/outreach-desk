@@ -10,7 +10,8 @@ import {firecrawlAvailable,firecrawlSearch} from './firecrawl.mjs';
 import {perplexityAvailable,perplexitySearch,limaAvailable,findLimaEmail,reoonAvailable,verifyReoonEmail,reoonBalance} from './research-providers.mjs';
 import {verifyDomains} from './domain.mjs';
 import {mailSettingsPublic,saveMailSettings,loadMailSettings,assertSafeImapHost} from './mail-settings.mjs';
- import {fetchRecentMail,imapConfigured,watchMail} from './imap.mjs';
+ import {fetchRecentMail,imapConfigured} from './imap.mjs';
+import {createMailServer} from './mail-server.mjs';
 import {authUsername,clearSessions,createSession,destroySession,ensureAuth,ensureAdminPassword,initSessions,readAuth,sessionFrom,setPassword,verifyPassword} from './auth.mjs';
 export function classifyStreamError(error,req){
  if(error&&error.status)return {status:error.status,message:error.message};
@@ -262,84 +263,10 @@ function exportAudit(ws,project,from,to,format){
  }));
   return format==='jsonl'?rows.map(x=>JSON.stringify(x)).join('\n'):['time,project,action,channel,lead,contact',...rows.map(r=>Object.values(r).map(csv).join(','))].join('\n');
  }
- // ---- Real-time mail: shared ingest + IDLE watcher + live browser stream ----
- // DreamHost has no webhook; the IMAP push primitive is IDLE — one persistent
- // authenticated connection that fires only when a message lands (no polling, no
- // manual fetch). watchMail already auto-reconnects on drop, so we never add our own.
- // The browser keeps one EventSource open on the Thread view; when the watcher (or a
- // manual fetch) ingests mail we push an event so the open tab updates without reload.
- // send() always ends the response, so the SSE route below writes raw and bypasses it.
- const sseClients=new Set();
- function broadcastMailUpdate(payload){
-  const data='event: mail\ndata: '+JSON.stringify(payload)+'\n\n';
-  for(const client of sseClients){try{client.write(data);}catch{sseClients.delete(client);}}
- }
- // Ingest normalized IMAP messages into the workspace. Shared by /api/mail/fetch and the
- // IDLE watcher so both use the SAME deduped compare-and-swap write path. The reducer
-  // dedups by Message-ID (falling back to uid), so a retry after a lost CAS never
-  // double-adds. The watcher passes the mailbox's bound workspace (settings.workspace);
-  // when none is set, ingestMail falls back to the FIRST workspace, never state.active —
-  // that value is mutated by unrelated browser actions and must not steer live intake.
-  // The bounded retry loop coexists with the 5-minute maintain() interval, which bumps
-  // the revision under the same CAS.
- async function ingestMail(messages,{workspace}={}){
-  const settings=await loadMailSettings(dataDir);
-   if(!settings||!imapConfigured(settings))return {added:0,skipped:'no-settings'};
-   const list=Array.isArray(messages)?messages.filter(Boolean):[];
-   if(!list.length)return {added:0,skipped:'all-dupes'};
-   for(let attempt=0;attempt<4;attempt++){
-    // read() (not load()/maintain()): ingest only needs the current state for the CAS.
-    // maintain() runs runDaily + verifyPendingDomains, and the IDLE watcher calls this on
-    // every inbound email — doing full maintenance per message is needless latency and
-    // network cost. The manual /api/mail/fetch path still runs maintain() once (its own
-    // revision precheck), so scheduled maintenance is unaffected.
-    const state=await read();
-    // Resolve the target workspace deterministically: an explicit id (the mailbox's bound
-    // workspace, or the browser's for a manual fetch), else the first workspace — never
-    // state.active. The reducer honours a concrete id, so live intake lands predictably.
-    const target=(workspace&&state.workspaces.some(w=>w.id===workspace))?workspace:state.workspaces[0]?.id;
-    const result=perform(state,'thread-ingest',{workspace:target,messages:list});
-    if(!result.added)return {added:0,skipped:'all-dupes',revision:state.revision};
-    const previous=state.revision;state.revision++;
-    if(await store.save(state.revision,encodeState(state),previous)){
-     broadcastMailUpdate({added:result.added,revision:state.revision});
-     return {added:result.added,revision:state.revision};
-   }
-  }
-  throw requestError(409,'The workspace changed. Please try again.');
- }
-  // One persistent IDLE connection per server process. Guarded against a double start;
-  // never started during createApp (only on listen) so tests that build the app without
-  // listening never open a socket, and imapflow/mailparser stay lazy. The `starting`
-  // flag reserves the slot synchronously across the awaits below, so two concurrent
-  // /api/mail/save calls (or a save racing listen() startup) cannot leak a second watcher.
-  let mailWatcher=null, mailWatcherStarting=false;
-  async function startMailWatcher(){
-   if(mailWatcher||mailWatcherStarting)return;
-   mailWatcherStarting=true;
-   try{
-    const settings=await loadMailSettings(dataDir);
-    if(!settings||!imapConfigured(settings)){console.log('Mail watcher: not configured, skipping.');return;}
-    try{await assertSafeImapHost(settings.host);}
-    catch(error){console.error('Mail watcher: refusing unsafe host -',error.message);return;}
-    mailWatcher=watchMail({
-     ...settings,
-     // onNew receives the whole `exists` batch and must be awaitable: ingestMail resolves
-     // once the messages are committed and rejects on a CAS conflict, which tells the
-     // watcher to keep its UID mark and retry instead of dropping the mail. The mailbox is
-     // bound to settings.workspace so live intake never lands in the browser-driven active
-     // workspace.
-     onNew:(messages)=>ingestMail(messages,{workspace:settings.workspace}),
-     onError:(error)=>console.error('Mail watcher error:',error.response||error.message||error),
-    });
-    console.log('Mail watcher: IDLE connected for',settings.user);
-   }finally{mailWatcherStarting=false;}
-  }
- async function stopMailWatcher(){
-  if(!mailWatcher)return;
-  const watcher=mailWatcher;mailWatcher=null;
-  try{await watcher.stop();}catch{/* ignore teardown errors */}
- }
+  // Real-time mail (IDLE watcher, live SSE stream, shared ingest/CAS write) lives in
+  // mail-server.mjs, wired with this app's store/read/encodeState/perform so the request
+  // handler below only routes to it rather than owning a stateful background resource.
+  const mail=createMailServer({dataDir, store, read, encodeState, requestError, perform});
  const server=createServer(async(req,res)=>{
  try{
    const boundPort=server.address()?.port;
@@ -407,7 +334,7 @@ function exportAudit(ws,project,from,to,format){
     const workspace=String(input.workspace||state.workspaces[0]?.id||'');
     if(!state.workspaces.some(w=>w.id===workspace))throw requestError(400,'Unknown workspace for the mailbox.');
      await saveMailSettings(dataDir,{...input,workspace});
-     await stopMailWatcher();await startMailWatcher(); // apply the new mailbox without a process restart
+      await mail.stopWatcher();await mail.startWatcher(); // apply the new mailbox without a process restart
      send(res,200,{ok:true,settings:await mailSettingsPublic(dataDir)});return;
   }
   if(u.pathname==='/api/mail/test'){
@@ -443,7 +370,7 @@ function exportAudit(ws,project,from,to,format){
       console.error('IMAP fetch failed:',error.response||error.message||error);
       throw requestError(502,'Could not fetch mail. Check the mailbox settings and try again.');
     }
-    const result=await ingestMail(messages,{workspace:input.workspace});
+    const result=await mail.ingestMail(messages,{workspace:input.workspace});
     send(res,200,stateResponse(await read(),result));return;
   }
   if(u.pathname==='/api/mail/stream'&&req.method==='GET'){
@@ -453,12 +380,12 @@ function exportAudit(ws,project,from,to,format){
     res.writeHead(200,{'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-cache, no-transform',Connection:'keep-alive','X-Accel-Buffering':'no'});
     res.write('retry: 3000\n\n');
     res.write('data: '+JSON.stringify({hello:true})+'\n\n');
-    sseClients.add(res);
+    mail.addSseClient(res);
     // On a failed keep-alive write the socket is already gone; deregister it immediately so
     // a dead client cannot linger in the set (and keep erroring) before its 'close' fires.
-    const ping=setInterval(()=>{try{res.write(': ping\n\n');}catch{clearInterval(ping);sseClients.delete(res);}},25_000);
+    const ping=setInterval(()=>{try{res.write(': ping\n\n');}catch{clearInterval(ping);mail.removeSseClient(res);}},25_000);
     ping.unref?.();
-    req.on('close',()=>{clearInterval(ping);sseClients.delete(res);});
+    req.on('close',()=>{clearInterval(ping);mail.removeSseClient(res);});
     return;
   }
   if(u.pathname==='/api/import-preview'){
@@ -536,11 +463,11 @@ return {
     const where=serverMode()?'listening on 0.0.0.0:'+server.address().port+' (server mode)':'http://localhost:'+server.address().port+'/';
     const storeLabel=store.backend==='postgres'?'Neon Postgres (DATABASE_URL)':'local SQLite '+join(dataDir,'outreach.sqlite');
      console.log('Vitalise · '+where+' · store: '+storeLabel);
-     startMailWatcher().catch(error=>console.error('Mail watcher start failed:',error.message||error));
+      mail.startWatcher(); // transient boot failures retry internally (see mail-server.mjs)
     });
  }),
  close:()=>new Promise(resolveClose=>{
-   const finish=async()=>{clearInterval(dailyInterval);await stopMailWatcher();Promise.resolve(store.close()).then(()=>resolveClose(),()=>resolveClose());};
+    const finish=async()=>{clearInterval(dailyInterval);await mail.stopWatcher();Promise.resolve(store.close()).then(()=>resolveClose(),()=>resolveClose());};
   if(server.listening)server.close(finish);else finish();
  })
 };
