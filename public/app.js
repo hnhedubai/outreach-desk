@@ -127,6 +127,19 @@ async function request(path,body){
  return data;
 }
 async function refresh(){({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable}=await request('/api/state'));try{mail=await request('/api/mail');}catch{mail=null;}}
+// Live inbox: the server pushes an SSE event the instant the IMAP IDLE watcher (or a
+// manual fetch) imports mail, so an open Thread tab updates without a reload. Opened once
+// per authenticated session; the browser reconnects automatically if the stream drops.
+let mailStream=null;
+function openMailStream(){
+ if(mailStream)return;
+ try{mailStream=new EventSource('/api/mail/stream');}catch{return;}
+ mailStream.addEventListener('mail',async()=>{
+  try{await refresh();if(route().page==='thread'){ui.threadView='inbox';ui.threadFolder='inbox';}render();}
+  catch{/* transient refresh error; the next event or a manual refresh recovers */}
+ });
+ mailStream.onerror=()=>{/* EventSource auto-reconnects; nothing to do here */};
+}
 async function action(type,input={},options={}){
  if(busy)return;
  const r=route();busy=true;
@@ -778,7 +791,7 @@ async function onSubmit(event){
  const kind=f.dataset.form,data=values(f);
  if(kind==='login'){
   const submit=f.querySelector('button[type="submit"]');submit.disabled=true;
-  try{await request('/api/auth/login',{username:data.username,password:data.password});authenticated=true;await refresh();if(location.pathname==='/')history.replaceState(null,'',workspace().projects[0]?go('today',workspace().projects[0].id):go('home'));render({keepScroll:false});}
+  try{await request('/api/auth/login',{username:data.username,password:data.password});authenticated=true;await refresh();if(location.pathname==='/')history.replaceState(null,'',workspace().projects[0]?go('today',workspace().projects[0].id):go('home'));render({keepScroll:false});openMailStream();}
   catch(error){app.innerHTML=loginPage(error.message);}
   finally{if(submit.isConnected)submit.disabled=false;}
   return;
@@ -898,9 +911,10 @@ if(!window.__compat||window.__compat.ok!==false){
   if(authenticated){
     await refresh();
     if(location.pathname==='/')history.replaceState(null,'',workspace().projects[0]?go('today',workspace().projects[0].id):go('home'));
-    if(route().page==='thread')navCollapsed=true;
-    render({keepScroll:false});
-  }else app.innerHTML=loginPage();
+     if(route().page==='thread')navCollapsed=true;
+     render({keepScroll:false});
+     openMailStream();
+   }else app.innerHTML=loginPage();
   window.__vitaliseBooted=true;
  }catch(error){app.textContent='Vitalise could not open. '+error.message;}
 }
