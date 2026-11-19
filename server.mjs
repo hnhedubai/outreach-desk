@@ -390,9 +390,11 @@ function exportAudit(ws,project,from,to,format){
     if(!thread)throw requestError(404,'Conversation unavailable.');
     const message=input.messageId?thread.messages.find(m=>m.id===input.messageId):thread.messages.at(-1);
     if(!message)throw requestError(404,'Message unavailable.');
+    // smtpUser/smtpPass reuse the saved mailbox login so the relay never has to store the password.
     const email={from:settings.user,fromName:ws.members[0]?.name||'',
       to:message.to.map(p=>p.email).filter(Boolean),cc:message.cc.map(p=>p.email).filter(Boolean),
-      subject:thread.subject||'(no subject)',html:message.bodyHtml||'',text:message.bodyText||''};
+      subject:thread.subject||'(no subject)',html:message.bodyHtml||'',text:message.bodyText||'',
+      smtpUser:settings.user,smtpPass:settings.password||''};
     let status='sent',err='';
     try{await sendViaRelay(email);}catch(error){status='failed';err=error.message;}
     perform(state,'thread-send-status',{workspace:ws.id,threadId:thread.id,messageId:message.id,status,error:err});

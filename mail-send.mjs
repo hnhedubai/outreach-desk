@@ -35,6 +35,12 @@ export async function sendViaRelay(message){
   if(!to.length)throw Object.assign(new Error('Add at least one recipient.'),{status:400});
   const payload={from:String(message.from||''),fromName:String(message.fromName||''),to,cc,
     subject:String(message.subject||''),html:String(message.html||''),text:String(message.text||'')};
+  // The app already holds the mailbox login (it uses the same credential for IMAP), so pass it to
+  // the relay per-request over HTTPS instead of storing it on the relay host. Included only when
+  // present, so an unconfigured install (or a test that seeds no password) sends no credential fields.
+  const smtpUser=String(message.smtpUser||''), smtpPass=String(message.smtpPass||'');
+  if(smtpUser)payload.smtp_user=smtpUser;
+  if(smtpPass)payload.smtp_pass=smtpPass;
   let response;
   try{
     response=await fetch(url,{method:'POST',

@@ -552,8 +552,11 @@ dialog.wizard .btn.primary:hover{background:var(--accent-dark)}
 .th-fmt-color input[type=color]{width:16px;height:16px;padding:0;border:0;background:none;cursor:pointer}
 /* Rendered rich text inside the editor and inside sent messages */
 .th-edit table,.th-msg-body table{border-collapse:collapse;margin:8px 0;width:auto;max-width:100%}
-.th-edit th,.th-edit td,.th-msg-body th,.th-msg-body td{border:1px solid var(--line);padding:5px 9px;font-size:inherit;text-align:left}
-.th-edit th,.th-msg-body th{background:var(--surface-alt);font-weight:700}
+/* Compose editor: keep visible cell borders so table structure is clear while editing. */
+.th-edit th,.th-edit td{border:1px solid var(--line);padding:5px 9px;font-size:inherit;text-align:left}
+.th-edit th{background:var(--surface-alt);font-weight:700}
+/* Rendered messages: match Gmail — no forced cell borders, respect the email's own borderless layout. */
+.th-msg-body th,.th-msg-body td{border:0;padding:6px 10px;font-size:inherit;text-align:left;vertical-align:top;background:none;font-weight:inherit}
 .th-edit pre,.th-msg-body pre{background:var(--surface-alt);border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-family:ui-monospace,'Cascadia Code','Courier New',monospace;font-size:12.5px;line-height:1.5;white-space:pre-wrap;overflow:auto;margin:8px 0}
 .th-edit code,.th-msg-body code{background:var(--surface-alt);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-family:ui-monospace,'Cascadia Code','Courier New',monospace;font-size:12.5px}
 .th-edit pre code,.th-msg-body pre code{background:none;border:0;padding:0}

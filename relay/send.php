@@ -12,9 +12,10 @@
  *      MAIL_RELAY_SECRET, and SMTP_* are the DreamHost mailbox credentials.
  *   3. Point the app at it: MAIL_RELAY_URL=https://bulk.vitalise.io/relay/send.php
  *
- * Sending uses PHPMailer when available (recommended — authenticated, DKIM-friendly). If
- * PHPMailer is not present it falls back to PHP's mail(), which DreamHost routes over its
- * own SMTP transport for the hosting domain.
+ * Sending is authenticated SMTP only (PHPMailer). PHP's mail() is deliberately NOT used:
+ * DreamHost applies DKIM only to SMTP-authenticated messages, and an unsigned message fails
+ * DMARC because SPF does not domain-align through the MailChannels relay. If PHPMailer or the
+ * SMTP credentials are missing, the relay returns 503 rather than sending unsigned mail.
  */
 
 declare(strict_types=1);
@@ -27,6 +28,22 @@ $CONFIG = [
     'smtp_pass' => getenv('SMTP_PASS') ?: '',                 // the mailbox password
     'phpmailer' => __DIR__ . '/PHPMailer/src/PHPMailer.php',  // adjust to your PHPMailer location
 ];
+
+// DreamHost shared PHP does NOT inherit shell environment variables, so the secrets above would
+// be empty. Instead, read them from a protected config.php sitting next to this file. config.php
+// returns an array of the same keys; those values override the getenv() defaults. Keep config.php
+// OUT of version control — it stores your mailbox password. Accessing it over HTTP is safe: PHP
+// executes it and it outputs nothing.
+$configFile = __DIR__ . '/config.php';
+if (is_file($configFile)) {
+    $loaded = require $configFile;
+    if (is_array($loaded)) {
+        foreach (['relay_key', 'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass'] as $key) {
+            if (array_key_exists($key, $loaded)) $CONFIG[$key] = $loaded[$key];
+        }
+    }
+    $CONFIG['smtp_port'] = (int) $CONFIG['smtp_port'];
+}
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -59,46 +76,44 @@ $fromName= (string)($body['fromName'] ?? '');
 
 function filter_var_int($email): bool { return (bool)filter_var($email, FILTER_VALIDATE_EMAIL); }
 
-// Prefer authenticated SMTP via PHPMailer.
-if (is_file($CONFIG['phpmailer'])) {
-    require_once $CONFIG['phpmailer'];
-    require_once dirname($CONFIG['phpmailer']) . '/SMTP.php';
-    require_once dirname($CONFIG['phpmailer']) . '/Exception.php';
-    $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
-    try {
-        $mail->isSMTP();
-        $mail->Host       = $CONFIG['smtp_host'];
-        $mail->Port       = $CONFIG['smtp_port'];
-        $mail->SMTPAuth   = true;
-        $mail->Username   = $CONFIG['smtp_user'];
-        $mail->Password   = $CONFIG['smtp_pass'];
-        $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->setFrom($from, $fromName);
-        foreach ($to as $addr) $mail->addAddress($addr);
-        foreach ($cc as $addr) $mail->addCC($addr);
-        $mail->CharSet = 'UTF-8';
-        $mail->Subject = $subject;
-        $mail->isHTML(true);
-        $mail->Body    = $html;
-        $mail->AltBody = $text;
-        $mail->send();
-        echo json_encode(['ok' => true]);
-    } catch (\Throwable $e) {
-        fail(502, 'SMTP send failed: ' . $e->getMessage());
-    }
-    exit;
+// Prefer per-request SMTP credentials supplied by the authenticated app (it already holds the
+// mailbox login), so the relay does not need to store the password. Falls back to config.php /
+// env only when the body omits them.
+if (isset($body['smtp_user']) && $body['smtp_user'] !== '') $CONFIG['smtp_user'] = (string) $body['smtp_user'];
+if (isset($body['smtp_pass']) && $body['smtp_pass'] !== '') $CONFIG['smtp_pass'] = (string) $body['smtp_pass'];
+
+// Send ONLY via authenticated SMTP (PHPMailer). There is intentionally no mail() fallback:
+// DreamHost signs SMTP-authenticated mail with DKIM, and an unsigned message would fail DMARC
+// (SPF does not domain-align through the MailChannels relay). Misconfiguration fails loudly.
+if (!is_file($CONFIG['phpmailer'])) {
+    fail(503, 'PHPMailer is not installed at the configured path; refusing to send unsigned mail.');
+}
+if ($CONFIG['smtp_user'] === '' || $CONFIG['smtp_pass'] === '') {
+    fail(503, 'SMTP credentials are not configured (set SMTP_USER and SMTP_PASS).');
 }
 
-// Fallback: PHP mail() — DreamHost routes this over its own SMTP for the hosting domain.
-$headers  = 'From: ' . ($fromName !== '' ? sprintf('%s <%s>', $fromName, $from) : $from) . "\r\n";
-if ($cc) $headers .= 'Cc: ' . implode(', ', $cc) . "\r\n";
-$headers .= 'MIME-Version: 1.0' . "\r\n";
-$boundary = 'vitalise-' . bin2hex(random_bytes(8));
-$headers .= "Content-Type: multipart/alternative; boundary=\"$boundary\"\r\n";
-$message  = "--$boundary\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n$text\r\n";
-$message .= "--$boundary\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n$html\r\n";
-$message .= "--$boundary--";
-foreach ($to as $addr) {
-    if (!mail($addr, $subject, $message, $headers)) fail(502, 'mail() failed for ' . $addr);
+require_once $CONFIG['phpmailer'];
+require_once dirname($CONFIG['phpmailer']) . '/SMTP.php';
+require_once dirname($CONFIG['phpmailer']) . '/Exception.php';
+$mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+try {
+    $mail->isSMTP();
+    $mail->Host       = $CONFIG['smtp_host'];
+    $mail->Port       = $CONFIG['smtp_port'];
+    $mail->SMTPAuth   = true;
+    $mail->Username   = $CONFIG['smtp_user'];
+    $mail->Password   = $CONFIG['smtp_pass'];
+    $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+    $mail->setFrom($from, $fromName);
+    foreach ($to as $addr) $mail->addAddress($addr);
+    foreach ($cc as $addr) $mail->addCC($addr);
+    $mail->CharSet = 'UTF-8';
+    $mail->Subject = $subject;
+    $mail->isHTML(true);
+    $mail->Body    = $html;
+    $mail->AltBody = $text;
+    $mail->send();
+    echo json_encode(['ok' => true]);
+} catch (\Throwable $e) {
+    fail(502, 'SMTP send failed: ' . $e->getMessage());
 }
-echo json_encode(['ok' => true]);
