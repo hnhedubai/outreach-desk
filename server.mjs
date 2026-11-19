@@ -12,6 +12,7 @@ import {verifyDomains} from './domain.mjs';
 import {mailSettingsPublic,saveMailSettings,loadMailSettings,assertSafeImapHost} from './mail-settings.mjs';
  import {fetchRecentMail,imapConfigured} from './imap.mjs';
 import {createMailServer} from './mail-server.mjs';
+import {sendConfigured,sendViaRelay} from './mail-send.mjs';
 import {authUsername,clearSessions,createSession,destroySession,ensureAuth,ensureAdminPassword,initSessions,readAuth,sessionFrom,setPassword,verifyPassword} from './auth.mjs';
 export function classifyStreamError(error,req){
  if(error&&error.status)return {status:error.status,message:error.message};
@@ -113,8 +114,8 @@ function stateResponse(state,result){
  for(const workspace of state.workspaces)for(const project of workspace.projects)for(const lead of project.leads){
   if(lead.jevFit)lead.jevFit.stale=!currentJevFit(project,lead);
  }
-  return {state,result,webSearch:keyAvailable(),jevAvailable:jevAvailable(),firecrawlAvailable:firecrawlAvailable(),
-   perplexityAvailable:perplexityAvailable(),limaAvailable:limaAvailable(),reoonAvailable:reoonAvailable()};
+   return {state,result,webSearch:keyAvailable(),jevAvailable:jevAvailable(),firecrawlAvailable:firecrawlAvailable(),
+    perplexityAvailable:perplexityAvailable(),limaAvailable:limaAvailable(),reoonAvailable:reoonAvailable(),mailSend:sendConfigured()};
 }
 function scoringTarget(state,input){
  const workspace=state.workspaces.find(workspace=>workspace.id===input?.workspace);
@@ -372,6 +373,33 @@ function exportAudit(ws,project,from,to,format){
     }
     const result=await mail.ingestMail(messages,{workspace:input.workspace});
     send(res,200,stateResponse(await read(),result));return;
+  }
+  if(u.pathname==='/api/mail/send'){
+    // Transmit an ALREADY-RECORDED outgoing message (the client records via /api/action, then
+    // calls this only when the server advertised mailSend). Safe by default: refuses with 503
+    // unless MAIL_RELAY_URL + MAIL_RELAY_SECRET are set, so an unconfigured install never sends.
+    requirePost(req);
+    const input=await body(req,200_000);
+    if(!sendConfigured())throw requestError(503,'Set MAIL_RELAY_URL and MAIL_RELAY_SECRET to enable sending.');
+    const settings=await loadMailSettings(dataDir);
+    if(!settings||!settings.user)throw requestError(400,'Save a mailbox address first — it is used as the sender.');
+    const state=await read();
+    const ws=state.workspaces.find(w=>w.id===(input.workspace||state.active));
+    if(!ws)throw requestError(404,'Workspace unavailable.');
+    const thread=ws.threads.find(t=>t.id===input.threadId);
+    if(!thread)throw requestError(404,'Conversation unavailable.');
+    const message=input.messageId?thread.messages.find(m=>m.id===input.messageId):thread.messages.at(-1);
+    if(!message)throw requestError(404,'Message unavailable.');
+    const email={from:settings.user,fromName:ws.members[0]?.name||'',
+      to:message.to.map(p=>p.email).filter(Boolean),cc:message.cc.map(p=>p.email).filter(Boolean),
+      subject:thread.subject||'(no subject)',html:message.bodyHtml||'',text:message.bodyText||''};
+    let status='sent',err='';
+    try{await sendViaRelay(email);}catch(error){status='failed';err=error.message;}
+    perform(state,'thread-send-status',{workspace:ws.id,threadId:thread.id,messageId:message.id,status,error:err});
+    const previous=state.revision;state.revision++;
+    if(!(await store.save(state.revision,encodeState(state),previous)))throw requestError(409,'The workspace changed. Refresh and try again.');
+    if(status==='failed')throw requestError(502,'Saved to Sent, but delivery failed: '+(err||'the mail relay rejected the message.'));
+    send(res,200,stateResponse(state,{sent:true}));return;
   }
   if(u.pathname==='/api/mail/stream'&&req.method==='GET'){
     // Live inbox updates for the Thread view. send() always ends the response, so this

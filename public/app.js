@@ -6,7 +6,7 @@ import {parseCsv,parseWorkbook} from './spreadsheet.js';
 import {safeHref} from './sanitize.js';
 
 const app=document.querySelector('#app'),dialog=document.querySelector('#dialog'),toast=document.querySelector('#toast');
-let state,authenticated=false,webSearch=false,jevAvailable=false,firecrawlAvailable=false,perplexityAvailable=false,limaAvailable=false,reoonAvailable=false,mail=null,ui={},menu='',busy=false,noticeTimer,navCollapsed=false;
+let state,authenticated=false,webSearch=false,jevAvailable=false,firecrawlAvailable=false,perplexityAvailable=false,limaAvailable=false,reoonAvailable=false,mailSend=false,mail=null,ui={},menu='',busy=false,noticeTimer,navCollapsed=false;
 const workspace=()=>state.workspaces.find(x=>x.id===state.active)||state.workspaces[0];
 function route(){
  const parts=location.pathname.split('/').filter(Boolean).map(x=>{try{return decodeURIComponent(x);}catch{return x;}});
@@ -126,7 +126,7 @@ async function request(path,body){
  if(!res.ok)throw Object.assign(new Error(data.error||'Request failed.'),{status:res.status});
  return data;
 }
-async function refresh(){({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable}=await request('/api/state'));try{mail=await request('/api/mail');}catch(error){mail=null;console.error('Mail settings load failed:',error.message);}}
+async function refresh(){({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable,mailSend}=await request('/api/state'));try{mail=await request('/api/mail');}catch(error){mail=null;console.error('Mail settings load failed:',error.message);}}
 // Live inbox: the server pushes an SSE event the instant the IMAP IDLE watcher (or a
 // manual fetch) imports mail, so an open Thread tab updates without a reload. Opened once
 // per authenticated session; the browser reconnects automatically if the stream drops.
@@ -154,7 +154,7 @@ async function action(type,input={},options={}){
   const context=options.context||{workspace:r.ws.id,project:r.p?.id,lead:r.lead?.id};
   const payload={...context,...input};
   const out=await request('/api/action',{type,input:payload,revision:options.revision??state.revision});
-   ({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable}=out);
+   ({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable,mailSend}=out);
   if(dialog.open&&!options.context)dialog.close();
   if(options.after)options.after(out.result);
   render();
@@ -565,7 +565,7 @@ function applyFormat(cmd,value,editor){
    const original=button.textContent;busy=true;button.disabled=true;button.textContent='Fetching…';
    try{
     const out=await request('/api/mail/fetch',{workspace:r.ws.id,revision:state.revision});
-    ({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable}=out);
+    ({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable,mailSend}=out);
     const added=(out.result&&out.result.added)||0;
     ui.threadView='inbox';ui.threadFolder='inbox';
     render();
@@ -604,18 +604,29 @@ function applyFormat(cmd,value,editor){
      {message:'Draft saved.',after:r=>{if(r&&r.thread)ui.threadDraft={...cur,threadId:r.thread};}});
     return;
    }
-    if(type==='thread-submit'){
-     const draft=ui.threadDraft||{},f=threadForm();
-     const bad=invalidRecips();
-     if(bad.length){notify('Remove the invalid address'+(bad.length>1?'es':'')+': '+bad.join(', '),true);return;}
-     const after=r=>{ui.threadDraft=null;ui.threadView='inbox';clearSnapshot();if(r&&r.thread)ui.threadId=r.thread;};
-    if(draft.mode==='reply')await action('thread-reply',{threadId:draft.threadId,messageId:draft.messageId,bodyHtml:f.bodyHtml},{message:'Reply sent.',after});
-    else if(draft.mode==='replyAll')await action('thread-reply-all',{threadId:draft.threadId,messageId:draft.messageId,bodyHtml:f.bodyHtml},{message:'Reply sent to all.',after});
-    else if(draft.mode==='forward')await action('thread-forward',{threadId:draft.threadId,messageId:draft.messageId,to:f.to,cc:f.cc,bodyHtml:f.bodyHtml},{message:'Forwarded.',after});
-    else if(draft.mode==='receive')await action('thread-receive',{threadId:draft.threadId,from:draft.from,bodyHtml:f.bodyHtml},{message:'Inbound reply logged.',after});
-    else await action('thread-send',{subject:f.subject,to:f.to,cc:f.cc,bodyHtml:f.bodyHtml,threadId:draft.threadId||undefined,leadId:draft.leadId||undefined},{message:'Sent.',after});
-    return;
-   }
+     if(type==='thread-submit'){
+      const draft=ui.threadDraft||{},f=threadForm();
+      const bad=invalidRecips();
+      if(bad.length){notify('Remove the invalid address'+(bad.length>1?'es':'')+': '+bad.join(', '),true);return;}
+      const after=r=>{ui.threadDraft=null;ui.threadView='inbox';clearSnapshot();if(r&&r.thread)ui.threadId=r.thread;};
+      const isReceive=draft.mode==='receive';
+      const label=isReceive?'Inbound reply logged.':(draft.mode==='reply'||draft.mode==='replyAll')?'Reply sent.':draft.mode==='forward'?'Forwarded.':'Sent.';
+      const wsId=route().ws.id;
+      let res;
+      if(draft.mode==='reply')res=await action('thread-reply',{threadId:draft.threadId,messageId:draft.messageId,bodyHtml:f.bodyHtml},{message:false,after});
+      else if(draft.mode==='replyAll')res=await action('thread-reply-all',{threadId:draft.threadId,messageId:draft.messageId,bodyHtml:f.bodyHtml},{message:false,after});
+      else if(draft.mode==='forward')res=await action('thread-forward',{threadId:draft.threadId,messageId:draft.messageId,to:f.to,cc:f.cc,bodyHtml:f.bodyHtml},{message:false,after});
+      else if(draft.mode==='receive')res=await action('thread-receive',{threadId:draft.threadId,from:draft.from,bodyHtml:f.bodyHtml},{message:false,after});
+      else res=await action('thread-send',{subject:f.subject,to:f.to,cc:f.cc,bodyHtml:f.bodyHtml,threadId:draft.threadId||undefined,leadId:draft.leadId||undefined},{message:false,after});
+      if(!res)return; // the action failed and already surfaced the error
+      // Transmit only when the server has a relay configured; otherwise keep the local-only
+      // behaviour and just confirm the record. 'receive' logs inbound mail, so never sends.
+      if(!isReceive&&mailSend&&res.thread){
+       try{await request('/api/mail/send',{workspace:wsId,threadId:res.thread,messageId:res.messageId});notify(label);}
+       catch(error){notify(error.message,true);}
+      } else notify(label);
+      return;
+    }
      if(type==='fmt'){applyFormat(d.cmd,d.value);return;}
      if(type==='sig-fmt'){const ed=app.querySelector('.sig-edit');if(ed)applyFormat(d.cmd,d.value,ed);return;}
      if(type==='signature-save'){
@@ -721,7 +732,7 @@ function applyFormat(cmd,value,editor){
     if(type==='verify-email')body.contact=d.id;
     const out=await request('/api/verify-emails',body);
     if(href!==location.pathname||view!==ui)return;
-    ({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable}=out);
+    ({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable,mailSend}=out);
     render();
     const res=out.result||{};
     if(res.verified)notify(res.verified+(res.verified===1?' email verified.':' emails verified.'));

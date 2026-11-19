@@ -155,5 +155,15 @@ export function threadAction(ws,type,input){
     ws.threads=ws.threads.filter(x=>x.id!==thread.id);
     audit(ws,null,'Thread deleted',{threadId:thread.id});return {};
   }
+  if(type==='thread-send-status'){
+    // Stamp the outcome of an outbound relay submission onto an already-recorded message so
+    // the Thread UI can show sent/failed without a second source of truth.
+    const thread=byId(ws.threads,input.threadId,'Conversation unavailable.');
+    const message=findMessage(thread,input.messageId);
+    message.sendStatus=input.status==='sent'?'sent':'failed';
+    if(input.error)message.sendError=String(input.error).slice(0,300);else delete message.sendError;
+    message.sentAt=now();
+    return {thread:thread.id,messageId:message.id};
+  }
   invalid('Unknown action.',404);
 }
