@@ -276,11 +276,12 @@ function exportAudit(ws,project,from,to,format){
  }
  // Ingest normalized IMAP messages into the workspace. Shared by /api/mail/fetch and the
  // IDLE watcher so both use the SAME deduped compare-and-swap write path. The reducer
- // dedups by Message-ID (falling back to uid), so a retry after a lost CAS never
- // double-adds. The watcher has no browser context, so it omits `workspace` and the
- // reducer targets the active workspace (correct for this single-workspace install).
- // The bounded retry loop coexists with the 5-minute maintain() interval, which bumps
- // the revision under the same CAS.
+  // dedups by Message-ID (falling back to uid), so a retry after a lost CAS never
+  // double-adds. The watcher passes the mailbox's bound workspace (settings.workspace);
+  // when none is set, ingestMail falls back to the FIRST workspace, never state.active —
+  // that value is mutated by unrelated browser actions and must not steer live intake.
+  // The bounded retry loop coexists with the 5-minute maintain() interval, which bumps
+  // the revision under the same CAS.
  async function ingestMail(messages,{workspace}={}){
   const settings=await loadMailSettings(dataDir);
   if(!settings||!imapConfigured(settings))return {added:0,updated:0,skipped:'no-settings'};
@@ -293,7 +294,11 @@ function exportAudit(ws,project,from,to,format){
     // network cost. The manual /api/mail/fetch path still runs maintain() once (its own
     // revision precheck), so scheduled maintenance is unaffected.
     const state=await read();
-   const result=perform(state,'thread-ingest',{workspace,messages:list});
+    // Resolve the target workspace deterministically: an explicit id (the mailbox's bound
+    // workspace, or the browser's for a manual fetch), else the first workspace — never
+    // state.active. The reducer honours a concrete id, so live intake lands predictably.
+    const target=(workspace&&state.workspaces.some(w=>w.id===workspace))?workspace:state.workspaces[0]?.id;
+    const result=perform(state,'thread-ingest',{workspace:target,messages:list});
    if(!result.added&&!result.updated)return {added:0,updated:0,skipped:'all-dupes',revision:state.revision};
    const previous=state.revision;state.revision++;
    if(await store.save(state.revision,encodeState(state),previous)){
@@ -303,23 +308,33 @@ function exportAudit(ws,project,from,to,format){
   }
   throw requestError(409,'The workspace changed. Please try again.');
  }
- // One persistent IDLE connection per server process. Guarded against a double start;
- // never started during createApp (only on listen) so tests that build the app without
- // listening never open a socket, and imapflow/mailparser stay lazy.
- let mailWatcher=null;
- async function startMailWatcher(){
-  if(mailWatcher)return;
-  const settings=await loadMailSettings(dataDir);
-  if(!settings||!imapConfigured(settings)){console.log('Mail watcher: not configured, skipping.');return;}
-  try{await assertSafeImapHost(settings.host);}
-  catch(error){console.error('Mail watcher: refusing unsafe host -',error.message);return;}
-  mailWatcher=watchMail({
-   ...settings,
-   onNew:(message)=>{ingestMail([message]).catch(error=>console.error('Mail watcher ingest failed:',error.message||error));},
-   onError:(error)=>console.error('Mail watcher error:',error.response||error.message||error),
-  });
-  console.log('Mail watcher: IDLE connected for',settings.user);
- }
+  // One persistent IDLE connection per server process. Guarded against a double start;
+  // never started during createApp (only on listen) so tests that build the app without
+  // listening never open a socket, and imapflow/mailparser stay lazy. The `starting`
+  // flag reserves the slot synchronously across the awaits below, so two concurrent
+  // /api/mail/save calls (or a save racing listen() startup) cannot leak a second watcher.
+  let mailWatcher=null, mailWatcherStarting=false;
+  async function startMailWatcher(){
+   if(mailWatcher||mailWatcherStarting)return;
+   mailWatcherStarting=true;
+   try{
+    const settings=await loadMailSettings(dataDir);
+    if(!settings||!imapConfigured(settings)){console.log('Mail watcher: not configured, skipping.');return;}
+    try{await assertSafeImapHost(settings.host);}
+    catch(error){console.error('Mail watcher: refusing unsafe host -',error.message);return;}
+    mailWatcher=watchMail({
+     ...settings,
+     // onNew receives the whole `exists` batch and must be awaitable: ingestMail resolves
+     // once the messages are committed and rejects on a CAS conflict, which tells the
+     // watcher to keep its UID mark and retry instead of dropping the mail. The mailbox is
+     // bound to settings.workspace so live intake never lands in the browser-driven active
+     // workspace.
+     onNew:(messages)=>ingestMail(messages,{workspace:settings.workspace}),
+     onError:(error)=>console.error('Mail watcher error:',error.response||error.message||error),
+    });
+    console.log('Mail watcher: IDLE connected for',settings.user);
+   }finally{mailWatcherStarting=false;}
+  }
  async function stopMailWatcher(){
   if(!mailWatcher)return;
   const watcher=mailWatcher;mailWatcher=null;
@@ -385,7 +400,13 @@ function exportAudit(ws,project,from,to,format){
   if(u.pathname==='/api/mail/save'){
     requirePost(req);
     const input=await body(req,50_000);
-     await saveMailSettings(dataDir,input);
+    // Bind the mailbox to a concrete workspace so the IDLE watcher ingests there instead
+    // of the browser-driven active workspace. Default to the first workspace and reject an
+    // unknown id, so live intake can never be stranded on a stale or hand-typed value.
+    const state=await read();
+    const workspace=String(input.workspace||state.workspaces[0]?.id||'');
+    if(!state.workspaces.some(w=>w.id===workspace))throw requestError(400,'Unknown workspace for the mailbox.');
+     await saveMailSettings(dataDir,{...input,workspace});
      await stopMailWatcher();await startMailWatcher(); // apply the new mailbox without a process restart
      send(res,200,{ok:true,settings:await mailSettingsPublic(dataDir)});return;
   }

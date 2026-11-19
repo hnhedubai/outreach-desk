@@ -579,7 +579,7 @@ function applyFormat(cmd,value,editor){
    if(type==='thread-folder'){ui.threadFolder=d.value;render();return;}
    if(type==='thread-select'){ui.threadId=d.id;render();return;}
    if(type==='thread-demo'){notify('Campaign builder is still a preview — not wired yet.');return;}
-     if(type==='thread-compose'){if(!hasContent(ui.threadDraft))ui.threadDraft=loadSnapshot()||{mode:'compose',to:[],cc:[],subject:'',bodyHtml:signatureHtml()};ui.threadView='compose';render();return;}
+      if(type==='thread-compose'){const d=ui.threadDraft,fresh={mode:'compose',to:[],cc:[],subject:'',bodyHtml:signatureHtml()};if(!d){const snap=loadSnapshot();ui.threadDraft=snap&&snap.mode==='compose'?snap:fresh;}else if(d.mode!=='compose')ui.threadDraft=fresh;ui.threadView='compose';render();return;}
      if(type==='thread-discard'){if(hasContent(ui.threadDraft)&&!confirm('Discard this message? Your text will be lost.'))return;ui.threadDraft=null;clearSnapshot();ui.threadView='inbox';render();return;}
     if(type==='thread-cc-toggle'){ui.showCc=!ui.showCc;render();return;}
     if(type==='thread-reply'||type==='thread-reply-all'||type==='thread-forward'){
@@ -812,7 +812,7 @@ async function onSubmit(event){
   }
   if(kind==='mail-settings'){
    try{
-    const out=await request('/api/mail/save',{host:data.host,port:data.port,user:data.user,mailbox:data.mailbox,password:data.password||'',tls:data.tls==='on'});
+     const out=await request('/api/mail/save',{host:data.host,port:data.port,user:data.user,mailbox:data.mailbox,password:data.password||'',tls:data.tls==='on',workspace:workspace()?.id||''});
     mail=out.settings;render();notify('Mailbox settings saved.');
    }catch(error){notify(error.message,true);}
    return;

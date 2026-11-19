@@ -377,6 +377,11 @@ const isRecord=value=>value!==null&&typeof value==='object'&&!Array.isArray(valu
 
 // --- Thread / conversation helpers (app-internal mail, linked to real leads) ---
 const FOLDERS=new Set(['inbox','sent','drafts','archive','spam','trash']);
+// Hard ceiling on stored threads. Inbound mail grows the single workspace document on
+// every ingest, so without a cap the whole-document serialize + CAS write would scale
+// without bound with mail volume. Oldest auto-ingested mail is pruned first; anything the
+// user owns (starred, important, a linked lead, or a draft/sent message) is never dropped.
+const MAX_THREADS=2000;
 const tidyPerson=value=>{
   if(typeof value==='string'){const email=normalizeEmail(value);return email?{name:'',email}:null;}
   if(!isRecord(value))return null;
@@ -440,6 +445,21 @@ function quoteHtml(message){
     '<blockquote>'+message.bodyHtml+'</blockquote>';
 }
 function esc(value){return String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// Trim the thread list to MAX_THREADS when it overflows, dropping the OLDEST auto-ingested
+// mail first. Only inbound mail with no user stake is eligible: not starred, not important,
+// not linked to a lead, and not a draft or sent message. Returns how many were removed.
+function pruneThreads(ws){
+  const excess=ws.threads.length-MAX_THREADS;
+  if(excess<=0)return 0;
+  const droppable=ws.threads
+    .filter(t=>!t.starred&&!t.important&&!t.leadId&&t.folder!=='drafts'&&t.folder!=='sent')
+    .sort((a,b)=>Date.parse(a.updatedAt||0)-Date.parse(b.updatedAt||0))
+    .slice(0,excess);
+  if(!droppable.length)return 0;
+  const drop=new Set(droppable.map(t=>t.id));
+  ws.threads=ws.threads.filter(t=>!drop.has(t.id));
+  return drop.size;
+}
 
 export function perform(state,type,input={}){
   if(!isRecord(input))invalid('Provide action details as an object.');
@@ -507,6 +527,8 @@ export function perform(state,type,input={}){
       thread.updatedAt=message.at;thread.createdAt=message.at;
       added++;
     }
+    // Bound the document: drop the oldest auto-ingested mail if the cap is exceeded.
+    pruneThreads(ws);
     return {added,updated};
   }
 

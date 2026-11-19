@@ -177,7 +177,7 @@ export async function loadMailSettings(dataDir){
     catch{password='';} // wrong/rotated secret or tampered file — treat as not configured
   }
   return {host:saved.host||HOST_DEFAULT,port:portOf(saved.port),user:saved.user,
-    mailbox:saved.mailbox||MAILBOX_DEFAULT,tls:tlsOn(saved.tls),password};
+    mailbox:saved.mailbox||MAILBOX_DEFAULT,tls:tlsOn(saved.tls),workspace:saved.workspace||'',password};
 }
 
 // Masked settings safe to send to the browser: never the password, never the ciphertext.
@@ -187,7 +187,7 @@ export async function mailSettingsPublic(dataDir){
   return {configured,secretAvailable:mailSecretAvailable(),
     host:(saved&&saved.host)||HOST_DEFAULT,port:portOf(saved&&saved.port),
     user:(saved&&saved.user)||'',mailbox:(saved&&saved.mailbox)||MAILBOX_DEFAULT,
-    tls:tlsOn(saved&&saved.tls)};
+    tls:tlsOn(saved&&saved.tls),workspace:(saved&&saved.workspace)||''};
 }
 
 // Persist settings. A blank `password` keeps the previously stored one (so editing the
@@ -198,6 +198,7 @@ export async function saveMailSettings(dataDir,input={}){
   if(!user)throw Object.assign(new Error('Enter the mailbox address (username).'),{status:400});
   const host=await assertSafeImapHost(input.host||HOST_DEFAULT);
   const mailbox=tidy(input.mailbox).slice(0,120)||MAILBOX_DEFAULT;
+  const workspace=tidy(input.workspace,120);
   const password=typeof input.password==='string'?input.password:'';
 
   const existing=await readRaw(dataDir);
@@ -211,7 +212,7 @@ export async function saveMailSettings(dataDir,input={}){
   }
   if(!sealed)throw Object.assign(new Error('Enter the mailbox password.'),{status:400});
 
-  const record={host,port:portOf(input.port),user,mailbox,tls:tlsOn(input.tls),salt,sealed,savedAt:new Date().toISOString()};
+  const record={host,port:portOf(input.port),user,mailbox,tls:tlsOn(input.tls),workspace,salt,sealed,savedAt:new Date().toISOString()};
   // Use a unique temp name so two overlapping saves cannot write the same scratch file
   // before the atomic rename; the rename itself is the only point that swaps mail.json.
   const temp=join(dataDir,FILE+'.'+randomBytes(6).toString('hex')+'.tmp');

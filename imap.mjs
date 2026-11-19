@@ -125,6 +125,9 @@ export function watchMail({onNew, onError, ...settings} = {}) {
   // not report UIDNEXT, the mark stays 0 and the first new-mail event backfills the
   // mailbox — safe, because the reducer dedups by Message-ID.
   let lastUid = 0;
+  // Serialize `exists` handling: one batch is fetched, ingested and committed at a time,
+  // so overlapping IDLE notifications can never race the UID high-water mark.
+  let busy = false;
 
   const start = async () => {
     if (stopped) return;
@@ -136,16 +139,33 @@ export function watchMail({onNew, onError, ...settings} = {}) {
       const uidNext = Number(client.mailbox && client.mailbox.uidNext);
       if (!lastUid && Number.isFinite(uidNext) && uidNext > 0) lastUid = uidNext - 1;
       client.on('exists', async () => {
-        if (stopped) return;
+        if (stopped || busy) return;
+        busy = true;
+        const mark = lastUid;
         // `exists` fires when the message count grows, i.e. new mail. Fetch every UID
         // above the mark (not just the newest) so a burst of arrivals is fully ingested.
         try {
-          for await (const msg of client.fetch(`${lastUid + 1}:*`, FETCH, {uid: true})) {
+          // Collect and normalise the whole range first. A single unparseable message is
+          // skipped (its UID is still covered by maxSeen) instead of aborting the burst.
+          const batch = [];
+          let maxSeen = mark;
+          for await (const msg of client.fetch(`${mark + 1}:*`, FETCH, {uid: true})) {
             if (!msg) continue;
-            if (msg.uid > lastUid) lastUid = msg.uid;
-            if (msg.source) onNew && onNew(await normalize(msg));
+            if (msg.uid > maxSeen) maxSeen = msg.uid;
+            if (!msg.source) continue;
+            try { batch.push(await normalize(msg)); }
+            catch (err) { onError && onError(err); }
           }
-        } catch (err) { onError && onError(err); }
+          // Await the batch ingest. If it throws (e.g. a CAS conflict after all retries),
+          // we fall through WITHOUT moving lastUid, so the next `exists` re-fetches and
+          // retries — inbound mail is never silently lost.
+          if (batch.length && onNew) await onNew(batch);
+          lastUid = maxSeen;
+        } catch (err) {
+          onError && onError(err);
+        } finally {
+          busy = false;
+        }
       });
       // client.idle() resolves when the IDLE session ends (server timeout / stop).
       await client.idle();
