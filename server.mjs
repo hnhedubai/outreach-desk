@@ -31,6 +31,11 @@ const allowedHosts=()=>new Set(String(process.env.OUTREACH_ALLOWED_HOSTS??'').sp
 // A proxy terminates TLS, so the visible request scheme is http:// but the browser's
 // Origin header carries https://. Trust the forwarded proto, never the raw socket.
 const requestScheme=req=>serverMode()?(String(req.headers['x-forwarded-proto']??'').split(',')[0].trim()||'https'):'http';
+// Build the session Set-Cookie value. The Secure flag is added only when the request
+// actually arrived over https (server mode behind a TLS-terminating proxy), so the cookie
+// can never be sent in cleartext there. A local http://localhost install must NOT set
+// Secure, or the browser drops the cookie and login breaks entirely.
+const sessionCookie=(req,token,maxAge)=>`outreach_session=${token}; HttpOnly; SameSite=Strict;${requestScheme(req)==='https'?' Secure;':''} Path=/; Max-Age=${maxAge}`;
 export async function createApp({db:providedDb,dataDir:providedDataDir,port:requestedPort}={}){
  const root=dirname(fileURLToPath(import.meta.url));
  const port=Number(requestedPort??process.env.PORT??8282);
@@ -348,10 +353,10 @@ function exportAudit(ws,project,from,to,format){
    requirePost(req);
    const input=await body(req,50_000);
    if(input.username!==authUsername||!(await verifyPassword(dataDir,input.password)))throw requestError(401,'Incorrect username or password.');
-   const token=createSession();
-   res.setHeader('Set-Cookie','outreach_session='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000');
-   send(res,200,{ok:true});
-   return;
+    const token=createSession();
+    res.setHeader('Set-Cookie',sessionCookie(req,token,31536000));
+    send(res,200,{ok:true});
+    return;
   }
   if(u.pathname==='/api/auth/reset-status'&&req.method==='GET'){
    send(res,200,{configured:Boolean(await readAuth(dataDir))});
@@ -360,17 +365,17 @@ function exportAudit(ws,project,from,to,format){
   const session=sessionFrom(req);
   if(!session){send(res,401,{error:'Please log in.'});return;}
   if(u.pathname==='/api/auth/logout'){
-   requirePost(req);destroySession(req);
-   res.setHeader('Set-Cookie','outreach_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
+    requirePost(req);destroySession(req);
+    res.setHeader('Set-Cookie',sessionCookie(req,'',0));
    send(res,200,{ok:true});return;
   }
   if(u.pathname==='/api/auth/change-password'){
    requirePost(req);
    const input=await body(req,50_000);
    if(!(await verifyPassword(dataDir,input.currentPassword)))throw requestError(401,'Current password is incorrect.');
-   await setPassword(dataDir,input.newPassword);clearSessions();
-   const token=createSession();
-   res.setHeader('Set-Cookie','outreach_session='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000');
+    await setPassword(dataDir,input.newPassword);clearSessions();
+    const token=createSession();
+    res.setHeader('Set-Cookie',sessionCookie(req,token,31536000));
    send(res,200,{ok:true});return;
   }
   if(u.pathname==='/api/state'&&req.method==='GET'){send(res,200,stateResponse(await load()));return;}

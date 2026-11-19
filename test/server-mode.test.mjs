@@ -19,7 +19,7 @@ function request({port,method='GET',path='/',host,origin,proto,body}={}){
     const req=http.request({host:'127.0.0.1',port,method,path,headers},res=>{
       const chunks=[];
       res.on('data',chunk=>chunks.push(chunk));
-      res.on('end',()=>resolve({status:res.statusCode,body:Buffer.concat(chunks).toString('utf8')}));
+      res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,body:Buffer.concat(chunks).toString('utf8')}));
     });
     req.on('error',reject);
     if(body!==undefined)req.end(JSON.stringify(body));else req.end();
@@ -96,6 +96,30 @@ test('server mode accepts an https Origin behind a TLS-terminating proxy',async(
       body:{username:'admin',password:PASSWORD},
     });
     assert.equal(response.status,200);
+  });
+});
+
+test('server mode marks the session cookie Secure over https',async()=>{
+  await withServerMode(async({port})=>{
+    const response=await request({
+      port,method:'POST',path:'/api/auth/login',host:PUBLIC_HOST,
+      origin:`https://${PUBLIC_HOST}`,proto:'https',
+      body:{username:'admin',password:PASSWORD},
+    });
+    assert.equal(response.status,200);
+    assert.match(response.headers['set-cookie'][0],/^outreach_session=[^;]+; HttpOnly; SameSite=Strict; Secure; Path=\/; Max-Age=31536000$/);
+  });
+});
+
+test('server mode omits Secure when the request is not https',async()=>{
+  await withServerMode(async({port})=>{
+    const response=await request({
+      port,method:'POST',path:'/api/auth/login',host:PUBLIC_HOST,
+      origin:`http://${PUBLIC_HOST}`,proto:'http',
+      body:{username:'admin',password:PASSWORD},
+    });
+    assert.equal(response.status,200);
+    assert.doesNotMatch(response.headers['set-cookie'][0],/Secure/);
   });
 });
 
