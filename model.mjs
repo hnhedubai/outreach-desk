@@ -1,6 +1,11 @@
 import {randomUUID} from 'node:crypto';
 
 import {contactAllowed,handleKey,isSuppressed,suppressionKind} from './public/eligibility.js';
+// INVARIANT: model.mjs (server-side) imports browser modules from public/ on purpose — the
+// SAME sanitizer/eligibility code must run at the store so the client is never trusted to
+// make content safe (see public/sanitize.js). Any public/*.js imported here MUST stay
+// dependency-free ESM (no npm imports, no DOM/browser-only globals) so it also loads under
+// `node --test` and in the server process. That holds for eligibility.js and sanitize.js.
 import {sanitizeHtml,htmlToText} from './public/sanitize.js';
 import {normalizeDesignation} from './designation.mjs';
 import {threadAction} from './thread.mjs';

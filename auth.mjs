@@ -1,7 +1,11 @@
-import {randomBytes,scryptSync,timingSafeEqual} from 'node:crypto';
+import {randomBytes,scrypt,timingSafeEqual} from 'node:crypto';
+import {promisify} from 'node:util';
 import {readFile,writeFile,rename} from 'node:fs/promises';
 import {readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+// scrypt is intentionally expensive; run it asynchronously so a login (or password
+// change) never blocks the single-threaded event loop for other in-flight requests.
+const scryptAsync=promisify(scrypt);
 
 const username='admin';
 const passwordFile=dataDir=>join(dataDir,'auth.json');
@@ -17,11 +21,11 @@ export function initSessions(dataDir){
  persist();
 }
 
-const passwordBytes=(password,salt)=>scryptSync(password,salt,32);
+const passwordBytes=async(password,salt)=>scryptAsync(password,salt,32);
 const validPassword=password=>typeof password==='string'&&password.length>=10&&password.length<=200;
-const storedHash=(password)=>{
+const storedHash=async(password)=>{
  const salt=randomBytes(16);
- return {salt:salt.toString('base64'),hash:passwordBytes(password,salt).toString('base64'),changedAt:new Date().toISOString()};
+ return {salt:salt.toString('base64'),hash:(await passwordBytes(password,salt)).toString('base64'),changedAt:new Date().toISOString()};
 };
 const same=(a,b)=>{
  const left=Buffer.from(a),right=Buffer.from(b);
@@ -49,7 +53,7 @@ export async function verifyPassword(dataDir,password){
  const saved=await readAuth(dataDir);
  try{
   if(saved?.salt&&saved.hash){
-   return same(passwordBytes(password,Buffer.from(saved.salt,'base64')),Buffer.from(saved.hash,'base64'));
+   return same(await passwordBytes(password,Buffer.from(saved.salt,'base64')),Buffer.from(saved.hash,'base64'));
   }
   return false;
  }catch{return false;}
@@ -57,7 +61,7 @@ export async function verifyPassword(dataDir,password){
 export async function setPassword(dataDir,password){
  if(!validPassword(password))throw Object.assign(new Error(passwordRules),{status:400});
  const temp=passwordFile(dataDir)+'.tmp';
- await writeFile(temp,JSON.stringify({username,...storedHash(password)},null,2),{encoding:'utf8'});
+ await writeFile(temp,JSON.stringify({username,...(await storedHash(password))},null,2),{encoding:'utf8'});
  await rename(temp,passwordFile(dataDir));
 }
 // Seed the admin password from an environment-supplied value when none is configured

@@ -9,7 +9,9 @@
 // On an ephemeral host (Render) the data dir is wiped on redeploy, so OUTREACH_SECRET
 // must be set in the environment for a saved password to survive a redeploy. It is read
 // here from the process env, never stored.
-import {randomBytes,scryptSync,createCipheriv,createDecipheriv} from 'node:crypto';
+import {randomBytes,scrypt,createCipheriv,createDecipheriv} from 'node:crypto';
+import {promisify} from 'node:util';
+const scryptAsync=promisify(scrypt);
 import {readFile,writeFile,rename} from 'node:fs/promises';
 import {join} from 'node:path';
 import {isIP} from 'node:net';
@@ -135,13 +137,13 @@ export function mailSecretAvailable(){
   return typeof secret==='string'&&secret.length>0;
 }
 
-function deriveKey(salt){
+async function deriveKey(salt){
   const secret=process.env.OUTREACH_SECRET;
   if(typeof secret!=='string'||secret.length===0)throw Object.assign(new Error('Set OUTREACH_SECRET to encrypt mailbox credentials.'),{status:503});
-  return scryptSync(secret,salt,32);
+  return scryptAsync(secret,salt,32);
 }
 
-const seal=(password,key)=>{
+const seal=async(password,key)=>{
   const iv=randomBytes(12);
   const cipher=createCipheriv('aes-256-gcm',key,iv);
   const data=Buffer.concat([cipher.update(String(password),'utf8'),cipher.final()]);
@@ -173,7 +175,7 @@ export async function loadMailSettings(dataDir){
   if(!saved||!saved.user)return null;
   let password='';
   if(saved.sealed&&mailSecretAvailable()){
-    try{password=open(saved.sealed,deriveKey(Buffer.from(saved.salt,'base64')));}
+    try{password=open(saved.sealed,await deriveKey(Buffer.from(saved.salt,'base64')));}
     catch{password='';} // wrong/rotated secret or tampered file — treat as not configured
   }
   return {host:saved.host||HOST_DEFAULT,port:portOf(saved.port),user:saved.user,
@@ -208,7 +210,7 @@ export async function saveMailSettings(dataDir,input={}){
   if(password){
     if(!mailSecretAvailable())throw Object.assign(new Error('Set OUTREACH_SECRET in the server environment before saving a mailbox password.'),{status:503});
     salt=randomBytes(16).toString('base64');
-    sealed=seal(password,deriveKey(Buffer.from(salt,'base64')));
+    sealed=await seal(password,await deriveKey(Buffer.from(salt,'base64')));
   }
   if(!sealed)throw Object.assign(new Error('Enter the mailbox password.'),{status:400});
 

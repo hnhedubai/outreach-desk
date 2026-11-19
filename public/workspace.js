@@ -49,7 +49,7 @@ export const quoteTrail=message=>{
   const sigFmt=(cmd,label,title)=>'<button type="button" class="btn subtle th-fmt" data-action="sig-fmt" data-cmd="'+cmd+'" title="'+e(title)+'" aria-label="'+e(title)+'">'+label+'</button>';
 function threadPage(ws,ui){
  const view=ui.threadView||'inbox';
- return '<div class="thread-wrap">'+(view==='compose'?threadCompose(ws,ui):view==='campaigns'?threadCampaigns(ws):threadInbox(ws,ui))+'</div>';
+ return '<div class="thread-wrap">'+(view==='compose'?threadCompose(ws,ui):threadInbox(ws,ui))+'</div>';
 }
  // Read a persisted thread-pane width, clamped to [min,max]; falls back to def.
  const thW=(key,def,min,max)=>{const n=parseInt(localStorage.getItem('vitalise.'+key),10);return Number.isFinite(n)?Math.min(max,Math.max(min,n)):def;};
@@ -144,31 +144,6 @@ function threadCompose(ws,ui){
   '<div class="th-compose-foot">'+btn('Save draft','thread-save-draft','subtle')+
    '<span class="th-send">'+btn(mode==='receive'?'Log reply':'Send','thread-submit','primary')+'</span></div>'+
   '</div></div>';
-}
-function threadCampaigns(ws){
- const camps=[
-  {name:'Q4 e-SAF outreach',channel:'bulk sender',sent:312,total:1240,held:8,bounced:2,state:'review'},
-  {name:'Wind investors — Nordic',channel:'bulk sender',sent:448,total:700,held:0,bounced:5,state:'running'},
-  {name:'Iron & Steel offtake',channel:'draft',sent:0,total:0,held:0,bounced:0,state:'draft'}
- ];
- const steps=[['1 Audience','done'],['2 From','done'],['3 Content','on'],['4 Review',''],['5 Pacing','']];
- const board=[['Sent','312','muted'],['Delivered','288','ok'],['Opened','141','open'],['Clicked','37','click'],['Replied','9','reply'],['Held','8','warn']];
- return '<div class="th-camp"><div class="th-camp-head"><h2>Campaigns</h2><p class="muted">Bulk sends go through the workspace’s bulk sender subdomain. Review mode → Approve → booked. <span class="th-demo-tag">sample data</span></p></div>'+
- '<div class="th-camp-grid"><div>'+btn('+ New campaign','thread-demo','primary row-gap')+'</div></div>'+
- '<div class="th-camp-grid"><div class="stack">'+camps.map(c=>'<div class="th-crow"><div class="th-crow-meta"><b>'+e(c.name)+'</b><span class="muted small"> · '+e(c.channel)+'</span>'+
- (c.total?'<div class="bar">'+bar(c.sent/c.total*100)+'</div><div class="small muted">'+c.sent+' / '+c.total+' sent · <span class="warn">'+c.held+' held</span> · <span class="bad">'+c.bounced+' bounced</span></div>':'<div class="small muted">not booked</div>')+
- '</div>'+btn(c.state==='review'?'Review':c.state==='running'?'Open':'Continue','thread-demo','subtle')+'</div>').join('')+
- '</div><div class="th-wiz"><b>Builder — Q4 e-SAF outreach</b><span class="th-demo-tag">sample data</span>'+
- '<div class="th-wsteps">'+steps.map(([label,cls])=>'<span class="th-wstep '+cls+'">'+label+'</span>').join('')+'</div>'+
- '<div class="th-kv"><span class="muted">Audience segment</span><b>safe-to-contact · 1,240</b></div>'+
- '<div class="th-kv"><span class="muted">Gate breakdown</span><span><b class="ok">✓ 1,180</b> · <b class="bad">✕ 60 suppressed</b></span></div>'+
- '<div class="th-kv"><span class="muted">Sender / reputation</span><b>warmup 25%</b></div>'+
- '<div class="bar">'+bar(25)+'</div>'+
- '<div class="th-kv"><span class="muted">Daily cap</span><b>2,000 · gap auto</b></div>'+
- '<div class="small muted th-board-label">Live board</div>'+
- '<div class="th-board">'+board.map(([label,value,cls])=>'<div class="th-stat"><div class="big '+cls+'">'+value+'</div><div class="lbl">'+label+'</div></div>').join('')+'</div>'+
- '<div class="th-wiz-actions">'+btn('Save draft','thread-demo')+btn('Preview sample →','thread-demo','primary')+'</div>'+
- '</div></div></div>';
 }
 function mailboxCard(mail){
  const m=mail||{};

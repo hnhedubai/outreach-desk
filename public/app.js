@@ -579,7 +579,6 @@ function applyFormat(cmd,value,editor){
    if(views[type]){ui[views[type]]=d.value;if(type.startsWith('today-'))ui.todayPage=0;if(type==='agent-channel')ui.agentId='';render({keepScroll:type!=='thread-view'});return;}
    if(type==='thread-folder'){ui.threadFolder=d.value;render();return;}
    if(type==='thread-select'){ui.threadId=d.id;render();return;}
-   if(type==='thread-demo'){notify('Campaign builder is still a preview — not wired yet.');return;}
       if(type==='thread-compose'){const d=ui.threadDraft,fresh={mode:'compose',to:[],cc:[],subject:'',bodyHtml:signatureHtml()};if(!d){const snap=loadSnapshot();ui.threadDraft=snap&&snap.mode==='compose'?snap:fresh;}else if(d.mode!=='compose')ui.threadDraft=fresh;ui.threadView='compose';render();return;}
      if(type==='thread-discard'){if(hasContent(ui.threadDraft)&&!confirm('Discard this message? Your text will be lost.'))return;ui.threadDraft=null;clearSnapshot();ui.threadView='inbox';render();return;}
     if(type==='thread-cc-toggle'){ui.showCc=!ui.showCc;render();return;}
@@ -909,7 +908,12 @@ async function onSubmit(event){
  await action(kind,data,{message:kind==='invite'?'Pending invitation saved.':undefined});
 }
 window.addEventListener('popstate',onLocationChange);
-window.addEventListener('keydown',event=>{if(event.key==='Escape'&&menu){menu='';render();}});
+ window.addEventListener('keydown',event=>{if(event.key==='Escape'&&menu){menu='';render();}});
+ // Flush any debounced compose draft to localStorage the instant the tab is hidden or
+ // unloaded, so the 800ms autosave window can never drop the last keystrokes on a reload
+ // or close. saveSnapshot() is a no-op unless there is a contentful compose draft.
+ window.addEventListener('pagehide',()=>{clearTimeout(snapTimer);saveSnapshot();});
+ window.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){clearTimeout(snapTimer);saveSnapshot();}});
 // compat.js (classic script) may have already rendered an "unsupported browser"
 // notice; if so, skip booting so we don't overwrite it. If compat.js never loaded,
 // __compat is undefined and we boot normally.
