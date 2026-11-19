@@ -281,8 +281,13 @@ function exportAudit(ws,project,from,to,format){
   if(!settings||!imapConfigured(settings))return {added:0,updated:0,skipped:'no-settings'};
   const list=Array.isArray(messages)?messages.filter(Boolean):[];
   if(!list.length)return {added:0,updated:0,skipped:'all-dupes'};
-  for(let attempt=0;attempt<4;attempt++){
-   const state=await load();
+   for(let attempt=0;attempt<4;attempt++){
+    // read() (not load()/maintain()): ingest only needs the current state for the CAS.
+    // maintain() runs runDaily + verifyPendingDomains, and the IDLE watcher calls this on
+    // every inbound email — doing full maintenance per message is needless latency and
+    // network cost. The manual /api/mail/fetch path still runs maintain() once (its own
+    // revision precheck), so scheduled maintenance is unaffected.
+    const state=await read();
    const result=perform(state,'thread-ingest',{workspace,messages:list});
    if(!result.added&&!result.updated)return {added:0,updated:0,skipped:'all-dupes',revision:state.revision};
    const previous=state.revision;state.revision++;

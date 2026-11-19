@@ -138,7 +138,14 @@ function openMailStream(){
   try{await refresh();if(route().page==='thread'){ui.threadView='inbox';ui.threadFolder='inbox';}render();}
   catch{/* transient refresh error; the next event or a manual refresh recovers */}
  });
- mailStream.onerror=()=>{/* EventSource auto-reconnects; nothing to do here */};
+  mailStream.onerror=()=>{/* EventSource auto-reconnects; nothing to do here */};
+}
+// Tear the live stream down on sign-out so the server socket is released and the
+// browser stops auto-reconnecting a logged-out session. Re-opens on the next login.
+function closeMailStream(){
+  if(!mailStream)return;
+  try{mailStream.close();}catch{/* already closed */}
+  mailStream=null;
 }
 async function action(type,input={},options={}){
  if(busy)return;
@@ -536,10 +543,11 @@ function applyFormat(cmd,value,editor){
   if(input){input.type=input.type==='password'?'text':'password';button.textContent=input.type==='password'?'Show':'Hide';}
   return;
  }
-  if(type==='logout'){
-   try{await request('/api/auth/logout',{});authenticated=false;state=null;menu='';app.innerHTML=loginPage('You have been signed out.');}
-   catch(error){notify(error.message,true);}
-   return;
+   if(type==='logout'){
+    closeMailStream();
+    try{await request('/api/auth/logout',{});authenticated=false;state=null;menu='';app.innerHTML=loginPage('You have been signed out.');}
+    catch(error){notify(error.message,true);}
+    return;
   }
   if(type==='mail-test'){
    if(busy)return;

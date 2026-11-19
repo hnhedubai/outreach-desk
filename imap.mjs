@@ -116,6 +116,15 @@ export function watchMail({onNew, onError, ...settings} = {}) {
   let stopped = false;
   let client = null;
   let timer = null;
+  // UID high-water mark. IMAP sequence numbers shift whenever a message is expunged,
+  // so fetching the message whose sequence number equals the mailbox count is wrong
+  // after any expunge and can miss messages that land while a fetch is in flight.
+  // UIDs are stable and monotonically increasing per mailbox, so we remember the
+  // highest UID already ingested and only ever fetch the UIDs above it. This survives
+  // reconnects (the mark is closure state, not per-connection) and, if the server does
+  // not report UIDNEXT, the mark stays 0 and the first new-mail event backfills the
+  // mailbox — safe, because the reducer dedups by Message-ID.
+  let lastUid = 0;
 
   const start = async () => {
     if (stopped) return;
@@ -123,11 +132,18 @@ export function watchMail({onNew, onError, ...settings} = {}) {
     try {
       await client.connect();
       await client.mailboxOpen(s.mailbox);
-      client.on('exists', async (info) => {
-        const seq = info.exists; // highest recent number
+      // Seed the mark so opening the watcher never re-ingests mail that already landed.
+      const uidNext = Number(client.mailbox && client.mailbox.uidNext);
+      if (!lastUid && Number.isFinite(uidNext) && uidNext > 0) lastUid = uidNext - 1;
+      client.on('exists', async () => {
+        if (stopped) return;
+        // `exists` fires when the message count grows, i.e. new mail. Fetch every UID
+        // above the mark (not just the newest) so a burst of arrivals is fully ingested.
         try {
-          for await (const msg of client.fetch(String(seq), FETCH)) {
-            if (msg && msg.source) onNew && onNew(await normalize(msg));
+          for await (const msg of client.fetch(`${lastUid + 1}:*`, FETCH, {uid: true})) {
+            if (!msg) continue;
+            if (msg.uid > lastUid) lastUid = msg.uid;
+            if (msg.source) onNew && onNew(await normalize(msg));
           }
         } catch (err) { onError && onError(err); }
       });
