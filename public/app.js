@@ -126,7 +126,7 @@ async function request(path,body){
  if(!res.ok)throw Object.assign(new Error(data.error||'Request failed.'),{status:res.status});
  return data;
 }
-async function refresh(){({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable}=await request('/api/state'));try{mail=await request('/api/mail');}catch{mail=null;}}
+async function refresh(){({state,webSearch,jevAvailable,firecrawlAvailable,perplexityAvailable,limaAvailable,reoonAvailable}=await request('/api/state'));try{mail=await request('/api/mail');}catch(error){mail=null;console.error('Mail settings load failed:',error.message);}}
 // Live inbox: the server pushes an SSE event the instant the IMAP IDLE watcher (or a
 // manual fetch) imports mail, so an open Thread tab updates without a reload. Opened once
 // per authenticated session; the browser reconnects automatically if the stream drops.
@@ -310,7 +310,8 @@ function draftFromMessage(threadId,messageId,mode){
  const push=(list,target)=>{for(const p of list||[]){const k=String(p.email||'').toLowerCase();if(!p.email||k===se||seen.has(k))continue;seen.add(k);target.push(p.email);}};
  if(mode==='reply'){push(message.direction==='out'?message.to:[message.from],to);}
  else if(mode==='replyAll'){push(message.direction==='out'?[...message.to,...message.cc]:[message.from,...message.to,...message.cc],to);}
- const raw=message.subject||thread.subject||'';
+  // Messages carry no subject of their own — it lives on the thread.
+  const raw=thread.subject||'';
  const subject=mode==='forward'?'Fwd: '+(thread.subject||'(no subject)'):(/^(re|fwd):/i.test(raw)?raw:'Re: '+raw);
  const quoted=(mode==='reply'||mode==='replyAll')?quoteTrail(message):'';
  return {mode,threadId,messageId:message.id,leadId:thread.leadId||'',to,cc,subject,bodyHtml:quoted};

@@ -284,9 +284,9 @@ function exportAudit(ws,project,from,to,format){
   // the revision under the same CAS.
  async function ingestMail(messages,{workspace}={}){
   const settings=await loadMailSettings(dataDir);
-  if(!settings||!imapConfigured(settings))return {added:0,updated:0,skipped:'no-settings'};
-  const list=Array.isArray(messages)?messages.filter(Boolean):[];
-  if(!list.length)return {added:0,updated:0,skipped:'all-dupes'};
+   if(!settings||!imapConfigured(settings))return {added:0,skipped:'no-settings'};
+   const list=Array.isArray(messages)?messages.filter(Boolean):[];
+   if(!list.length)return {added:0,skipped:'all-dupes'};
    for(let attempt=0;attempt<4;attempt++){
     // read() (not load()/maintain()): ingest only needs the current state for the CAS.
     // maintain() runs runDaily + verifyPendingDomains, and the IDLE watcher calls this on
@@ -299,11 +299,11 @@ function exportAudit(ws,project,from,to,format){
     // state.active. The reducer honours a concrete id, so live intake lands predictably.
     const target=(workspace&&state.workspaces.some(w=>w.id===workspace))?workspace:state.workspaces[0]?.id;
     const result=perform(state,'thread-ingest',{workspace:target,messages:list});
-   if(!result.added&&!result.updated)return {added:0,updated:0,skipped:'all-dupes',revision:state.revision};
-   const previous=state.revision;state.revision++;
-   if(await store.save(state.revision,encodeState(state),previous)){
-    broadcastMailUpdate({added:result.added,updated:result.updated,revision:state.revision});
-    return {added:result.added,updated:result.updated,revision:state.revision};
+    if(!result.added)return {added:0,skipped:'all-dupes',revision:state.revision};
+    const previous=state.revision;state.revision++;
+    if(await store.save(state.revision,encodeState(state),previous)){
+     broadcastMailUpdate({added:result.added,revision:state.revision});
+     return {added:result.added,revision:state.revision};
    }
   }
   throw requestError(409,'The workspace changed. Please try again.');
@@ -454,7 +454,9 @@ function exportAudit(ws,project,from,to,format){
     res.write('retry: 3000\n\n');
     res.write('data: '+JSON.stringify({hello:true})+'\n\n');
     sseClients.add(res);
-    const ping=setInterval(()=>{try{res.write(': ping\n\n');}catch{/* removed on close below */}},25_000);
+    // On a failed keep-alive write the socket is already gone; deregister it immediately so
+    // a dead client cannot linger in the set (and keep erroring) before its 'close' fires.
+    const ping=setInterval(()=>{try{res.write(': ping\n\n');}catch{clearInterval(ping);sseClients.delete(res);}},25_000);
     ping.unref?.();
     req.on('close',()=>{clearInterval(ping);sseClients.delete(res);});
     return;

@@ -113,6 +113,17 @@ test('thread-ingest creates inbox threads and dedupes by Message-ID',()=>{
   assert.equal(ws.threads.length,before+1,'exactly one new thread was created in total');
 });
 
+test('thread-ingest ingests distinct messages that carry neither Message-ID nor uid',()=>{
+  const s=structuredClone(createState());
+  const ws=s.workspaces.find(w=>w.id===WS);
+  const r=perform(s,'thread-ingest',{workspace:WS,messages:[
+    {from:'A <a@lead.com>',to:'me@ws.com',subject:'one',text:'x',html:''},
+    {from:'B <b@lead.com>',to:'me@ws.com',subject:'two',text:'y',html:''},
+  ]});
+  assert.equal(r.added,2,'two identifier-less messages from different senders are both ingested, not collapsed onto one empty dedup key');
+  assert.equal(r.updated,undefined,'the ingest result no longer carries a dead updated field');
+});
+
 test('thread-ingest skips messages without a sender address and sanitises HTML bodies',()=>{
   const s=structuredClone(createState());
   const ws=s.workspaces.find(w=>w.id===WS);

@@ -15,13 +15,14 @@
 // (server.mjs does, transitively, on every request) never requires the packages to
 // be installed. CI runs `node --test` with no `npm install` — the same pattern used
 // for pg in db.mjs — so the deps only resolve when a real IMAP call is made.
+// Single source of truth for the DreamHost defaults lives in mail-settings.mjs; importing
+// them here (builtins-only, no npm deps) keeps CI dep-free and prevents host/port drift.
+import {HOST_DEFAULT,PORT_DEFAULT,MAILBOX_DEFAULT} from './mail-settings.mjs';
 let _ImapFlow=null,_simpleParser=null;
 async function imapflowLib(){if(!_ImapFlow)({ImapFlow:_ImapFlow}=await import('imapflow'));return _ImapFlow;}
 async function mailparserLib(){if(!_simpleParser)({simpleParser:_simpleParser}=await import('mailparser'));return _simpleParser;}
 
-const HOST_DEFAULT='imap.dreamhost.com';
-const PORT_DEFAULT=993;
-const MAILBOX_DEFAULT='INBOX';
+// (HOST_DEFAULT / PORT_DEFAULT / MAILBOX_DEFAULT are imported from mail-settings.mjs above.)
 
 // Resolve a settings object, defaulting each field from the environment so the
 // standalone script needs no changes. `settings` may be partial or omitted.

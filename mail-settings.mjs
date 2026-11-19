@@ -16,9 +16,9 @@ import {isIP} from 'node:net';
 import {lookup} from 'node:dns/promises';
 
 const FILE='mail.json';
-const HOST_DEFAULT='imap.dreamhost.com';
-const PORT_DEFAULT=993;
-const MAILBOX_DEFAULT='INBOX';
+export const HOST_DEFAULT='imap.dreamhost.com';
+export const PORT_DEFAULT=993;
+export const MAILBOX_DEFAULT='INBOX';
 const tidy=value=>String(value??'').trim();
 
 // ---- SSRF guard ------------------------------------------------------------

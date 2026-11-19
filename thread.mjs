@@ -21,12 +21,15 @@ export function threadAction(ws,type,input){
     // back to the IMAP uid) so repeated "Fetch new mail" pulls never duplicate a thread.
     const known=new Set();
     for(const t of ws.threads)for(const m of t.messages){if(m.mailMessageId)known.add(m.mailMessageId);if(m.mailUid!==undefined)known.add('uid:'+m.mailUid);}
-    let added=0,updated=0;
+    let added=0;
     for(const raw of list(input.messages,100)){
       if(!isRecord(raw))continue;
       const from=parseAddress(raw.from);if(!from.email)continue;
       const to=parseAddressList(raw.to);
-      const key=raw.messageId||('uid:'+(raw.uid??''));
+      // Build a dedup key only from a real identifier: Message-ID, else the IMAP uid.
+      // A message with neither gets an empty key (so it is never falsely collapsed onto the
+      // single 'uid:' entry a missing uid would otherwise produce) and is still ingested.
+      const key=raw.messageId?String(raw.messageId):(raw.uid!==undefined?'uid:'+raw.uid:'');
       if(key&&known.has(key))continue;
       const bodyHtml=String(raw.html||'').trim()
         ?String(raw.html)
@@ -45,7 +48,7 @@ export function threadAction(ws,type,input){
     }
     // Bound the document: drop the oldest auto-ingested mail if the cap is exceeded.
     pruneThreads(ws);
-    return {added,updated};
+    return {added};
   }
   if(type==='thread-save-draft'){
     const self=threadActor(ws);
