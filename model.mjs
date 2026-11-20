@@ -7,7 +7,6 @@ import {contactAllowed,handleKey,isSuppressed,suppressionKind} from './public/el
 // dependency-free ESM (no npm imports, no DOM/browser-only globals) so it also loads under
 // `node --test` and in the server process. That holds for eligibility.js and sanitize.js.
 import {sanitizeHtml,htmlToText} from './public/sanitize.js';
-import {normalizeInboundHtml} from './normalize-inbound.mjs';
 import {normalizeDesignation} from './designation.mjs';
 import {threadAction} from './thread.mjs';
 
@@ -418,9 +417,9 @@ function uniquePeople(people){
 const emailOf=p=>String(p?.email||'').toLowerCase();
 const withoutSelf=(people,selfEmail)=>people.filter(p=>emailOf(p)!==selfEmail);
 function newMessage({direction,from,to,cc,bodyHtml,kind,inReplyTo}){
-  // Inbound (fetched/received) mail arrives as marketing/Gmail nested-layout HTML; flatten the
-  // layout to readable flow before sanitising. Outbound (user-authored) bodies are untouched.
-  const html=direction==='in'?normalizeInboundHtml(bodyHtml):sanitizeHtml(bodyHtml);
+  // Inbound keeps the sender's markup (layout tables intact); the security sanitizer still
+  // removes script/handlers/unsafe URLs. Outbound bodies are sanitised the same way.
+  const html=sanitizeHtml(bodyHtml);
   return {id:id(),direction,from:tidyPerson(from)||{name:'',email:''},
     to:uniquePeople(personList(to)),cc:uniquePeople(personList(cc)),
     bodyHtml:html,bodyText:htmlToText(html).slice(0,8000),
