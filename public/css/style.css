@@ -539,7 +539,7 @@ dialog.wizard .btn.primary:hover{background:var(--accent-dark)}
 .th-tools{flex-wrap:wrap}
 .th-fmt{min-width:30px;padding:3px 7px;font-size:13px}
 .th-editor{padding:8px 16px;flex:1;min-height:150px}
-.th-edit{min-height:150px;border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--paper);line-height:1.6;outline:none;overflow:auto}
+.th-edit{min-height:150px;border:0;border-radius:8px;padding:12px 14px;background:var(--paper);line-height:1.6;outline:none;overflow:auto}
 .th-edit:focus{border-color:var(--accent)}
 .th-edit p{margin:0 0 10px}
 .th-edit blockquote{border-left:3px solid var(--line);margin:8px 0;padding:2px 12px;color:var(--muted)}
