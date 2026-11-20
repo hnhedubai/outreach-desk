@@ -155,7 +155,7 @@ function agentMode(ws,p,ui){
  const selected=mine.find(x=>x.a.id===ui.agentId)||mine.find(x=>!worked(x.a))||mine[0];
  const menu=segment(['All',...enabledChannels(p)],channel,'agent-channel');
  const panel=selected?(()=>{
-  const {a,l}=selected,draft=l.drafts[a.channel]?.body||'Hi '+(a.person.split(' ')[0]||'there')+', I’m reaching out about a potential renewable energy partnership. Would you be open to a brief conversation?';
+   const {a,l}=selected,draft=l.drafts[a.channel]?.body||'Hi '+(a.person.split(' ')[0]||'there')+',\n\n[One genuine line about them — something you actually noticed, in plain words.]\n\n[One short sentence on what you do and the outcome it gives them. No hype, no buzzwords.]\n\nIf it\'s useful I\'m happy to share a couple of ideas — no obligation. If it\'s not relevant, just say so and I won\'t follow up.\n\nThanks,\nVitalise';
   const available=canAttempt(ws,p,l,a);
   return card(l.name,'<p>'+e(a.person)+' · '+e(a.channel)+'</p><p class="small muted">'+e(handleLabel(a.handle))+'</p><div class="row-gap note">'+e(draft)+'</div><div class="flex wrap-flex row-gap">'+
    btn('Copy draft','copy','primary',{'data-text':draft,disabled:!available})+(available?outreachLink(ws,p,l,a.channel,a.handle,'Open '+a.channel):'<span class="pill off">Unavailable for outreach</span>')+link('Lead record',rowLink(l,p),'btn link')+'</div><div class="filters">'+marks.map(m=>btn(m,'mark',a.marks.includes(m)?'active':'',{'data-id':a.id,'data-mark':m,disabled:a.marks.includes(m)||(m==='Attempted'&&!available)})).join('')+btn('Skip to next','agent-next')+'</div>');
