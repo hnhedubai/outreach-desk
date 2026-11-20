@@ -112,6 +112,9 @@ try {
     $mail->isHTML(true);
     $mail->Body    = $html;
     $mail->AltBody = $text;
+    // Suppress the default "X-Mailer: PHPMailer ..." fingerprint (a recognisable bulk-mail marker).
+    // It is not part of the DKIM-signed headers, so blanking it does not affect authentication.
+    $mail->XMailer = '';
     $mail->send();
     echo json_encode(['ok' => true]);
 } catch (\Throwable $e) {
