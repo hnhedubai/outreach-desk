@@ -295,9 +295,24 @@ function workspaceWizardHtml(){
 const hidden=(name,value)=>'<input type="hidden" name="'+e(name)+'" value="'+e(value)+'">';
 const values=form=>Object.fromEntries(new FormData(form));
 const selfEmail=()=>String(workspace().members[0]?.email||'').toLowerCase();
-// Owner's stored signature (sanitised server-side). Prefilled into brand-new compose
-// bodies only; replies/forwards are built by draftFromMessage and stay untouched.
-const signatureHtml=()=>String(workspace().members[0]?.signature||'');
+// Owner's stored signature (sanitised server-side). When none is saved, fall back to a plain,
+// human signature — name + company only. No link and no "unsubscribe" boilerplate: both read as
+// bulk mail and hurt inbox placement for 1:1 sends.
+const defaultSignatureHtml=()=>{
+  const m=workspace().members[0]||{};
+  const name=String(m.name||'').trim()||'the Vitalise team';
+  return '<p>'+name+'<br>Vitalise</p>';
+};
+const signatureHtml=()=>String(workspace().members[0]?.signature||'')||defaultSignatureHtml();
+// Brand-new compose bodies start from a short, personal skeleton that ends in the signature.
+// The guidance lines force one specific, human detail (the single biggest anti-spam signal);
+// replies/forwards are built by draftFromMessage and stay untouched.
+const composeTemplateHtml=()=>'<p>Hi [first name],</p>'
+  +'<p>[One genuine line about them — something you actually noticed, in plain words.]</p>'
+  +'<p>[One short sentence on what you do and the outcome it gives them. No hype, no buzzwords.]</p>'
+  +'<p>If it\'s useful I\'m happy to share a couple of ideas — no obligation. If it\'s not relevant, just say so and I won\'t follow up.</p>'
+  +'<p>Thanks,</p>'
+  +signatureHtml();
 const splitRecipients=value=>String(value||'').split(/[,\s;]+/).map(s=>s.trim()).filter(s=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s));
 function threadForm(){
  return {to:splitRecipients(app.querySelector('.th-to')?.value),cc:splitRecipients(app.querySelector('.th-cc')?.value),
@@ -579,7 +594,7 @@ function applyFormat(cmd,value,editor){
    if(views[type]){ui[views[type]]=d.value;if(type.startsWith('today-'))ui.todayPage=0;if(type==='agent-channel')ui.agentId='';render({keepScroll:type!=='thread-view'});return;}
    if(type==='thread-folder'){ui.threadFolder=d.value;render();return;}
    if(type==='thread-select'){ui.threadId=d.id;render();return;}
-      if(type==='thread-compose'){const d=ui.threadDraft,fresh={mode:'compose',to:[],cc:[],subject:'',bodyHtml:signatureHtml()};if(!d){const snap=loadSnapshot();ui.threadDraft=snap&&snap.mode==='compose'?snap:fresh;}else if(d.mode!=='compose')ui.threadDraft=fresh;ui.threadView='compose';render();return;}
+      if(type==='thread-compose'){const d=ui.threadDraft,fresh={mode:'compose',to:[],cc:[],subject:'',bodyHtml:composeTemplateHtml()};if(!d){const snap=loadSnapshot();ui.threadDraft=snap&&snap.mode==='compose'?snap:fresh;}else if(d.mode!=='compose')ui.threadDraft=fresh;ui.threadView='compose';render();return;}
      if(type==='thread-discard'){if(hasContent(ui.threadDraft)&&!confirm('Discard this message? Your text will be lost.'))return;ui.threadDraft=null;clearSnapshot();ui.threadView='inbox';render();return;}
     if(type==='thread-cc-toggle'){ui.showCc=!ui.showCc;render();return;}
     if(type==='thread-reply'||type==='thread-reply-all'||type==='thread-forward'){
@@ -683,10 +698,9 @@ function applyFormat(cmd,value,editor){
   try{await navigator.clipboard.writeText(text);notify('Copied.');}catch{notify('Select the draft text and copy it manually.',true);}return;
  }
  if(type==='draft-template'){
-  const form=button.closest('form'),contact=l.contacts[0]?.name.split(' ')[0]||'there';
-  const offer=p.targeting.offer||'a potential renewable energy partnership';
-  form.elements.body.value='Hi '+contact+',\n\nI’m reaching out to '+l.name+' about '+offer.replace(/[.]+$/,'')+'. Would you be open to a brief conversation?\n\nBest,\n'+person(r.ws).name;
-  if(form.elements.subject&&!form.elements.subject.value)form.elements.subject.value='Renewable energy partnership';
+   const form=button.closest('form'),contact=l.contacts[0]?.name.split(' ')[0]||'there';
+    form.elements.body.value='Hi '+contact+',\n\n[One genuine line about '+l.name+' — something you actually noticed, in plain words.]\n\n[One short sentence on what you do and the outcome it gives them. No hype, no buzzwords.]\n\nIf it\'s useful I\'m happy to share a couple of ideas — no obligation. If it\'s not relevant, just say so and I won\'t follow up.\n\nThanks,\n'+person(r.ws).name+'\nVitalise';
+   if(form.elements.subject&&!form.elements.subject.value)form.elements.subject.value='a thought for '+l.name;
   form.elements.body.dispatchEvent(new Event('input',{bubbles:true}));
   return;
  }
